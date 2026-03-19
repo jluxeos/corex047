@@ -4,7 +4,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:paddingHorizontal="12dp"
+    android:paddingBottom="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -12,8 +13,17 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@drawable/overlay_bg"
-        android:paddingHorizontal="16dp"
+        android:paddingHorizontal="12dp"
         android:elevation="8dp">
+
+        <ImageButton
+            android:id="@+id/btnClose"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="@android:color/transparent"
+            android:padding="6dp"
+            android:tint="#79747E" />
 
         <EditText
             android:id="@+id/inputOverlay"
@@ -24,6 +34,7 @@
             android:textSize="15sp"
             android:background="@null"
             android:singleLine="true"
+            android:paddingHorizontal="8dp"
             android:textColor="#1C1B1F"
             android:textColorHint="#79747E" />
 
@@ -33,7 +44,8 @@
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_send"
             android:background="@drawable/btn_send_bg"
-            android:padding="8dp" />
+            android:padding="8dp"
+            android:tint="#FFFFFF" />
 
     </LinearLayout>
 

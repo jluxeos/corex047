@@ -4,7 +4,6 @@ import android.app.*
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.os.IBinder
-import android.util.Log
 import android.view.*
 import android.widget.EditText
 import android.widget.ImageButton
@@ -17,12 +16,10 @@ class OverlayService : Service() {
     companion object {
         const val CHANNEL_ID = "corex_overlay"
         const val NOTIF_ID = 1
-        const val TAG = "OverlayService"
     }
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate")
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification())
         setupOverlay()
@@ -41,10 +38,10 @@ class OverlayService : Service() {
         ).apply { gravity = Gravity.BOTTOM }
 
         windowManager.addView(overlayView, params)
-        Log.d(TAG, "Overlay añadido OK")
 
         val input = overlayView.findViewById<EditText>(R.id.inputOverlay)
         val btnSend = overlayView.findViewById<ImageButton>(R.id.btnSend)
+        val btnClose = overlayView.findViewById<ImageButton>(R.id.btnClose)
 
         input.setOnFocusChangeListener { _, hasFocus ->
             params.flags = if (hasFocus)
@@ -58,6 +55,10 @@ class OverlayService : Service() {
             val text = input.text.toString().trim()
             if (text.isNotEmpty()) input.setText("")
         }
+
+        btnClose.setOnClickListener {
+            stopSelf()
+        }
     }
 
     private fun createNotificationChannel() {
@@ -66,11 +67,23 @@ class OverlayService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val stopIntent = PendingIntent.getService(
+            this, 0,
+            Intent(this, OverlayService::class.java).apply { action = "STOP" },
+            PendingIntent.FLAG_IMMUTABLE
+        )
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Corex activo")
+            .setContentText("Toca para cerrar")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cerrar", stopIntent)
             .setOngoing(true)
             .build()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "STOP") stopSelf()
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
