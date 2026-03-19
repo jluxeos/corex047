@@ -7,8 +7,6 @@ import android.os.IBinder
 import android.view.*
 import android.view.animation.DecelerateInterpolator
 import android.widget.*
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 
 class OverlayService : Service() {
@@ -51,9 +49,10 @@ class OverlayService : Service() {
         val btnClose = overlayView.findViewById<ImageButton>(R.id.btnClose)
         val btnExpand = overlayView.findViewById<ImageButton>(R.id.btnExpand)
         val panelExpanded = overlayView.findViewById<View>(R.id.panelExpanded)
-        val recycler = overlayView.findViewById<RecyclerView>(R.id.recyclerHistorial)
         val panelAcciones = overlayView.findViewById<View>(R.id.panelAcciones)
         val panelAjustes = overlayView.findViewById<View>(R.id.panelAjustes)
+        val scrollHistorial = overlayView.findViewById<View>(R.id.scrollHistorial)
+        val tvHistorial = overlayView.findViewById<TextView>(R.id.tvHistorial)
         val tabHistorial = overlayView.findViewById<TextView>(R.id.tabHistorial)
         val tabAcciones = overlayView.findViewById<TextView>(R.id.tabAcciones)
         val tabAjustes = overlayView.findViewById<TextView>(R.id.tabAjustes)
@@ -61,8 +60,6 @@ class OverlayService : Service() {
         val tvDelayVal = overlayView.findViewById<TextView>(R.id.tvDelayVal)
         val btnGuardar = overlayView.findViewById<MaterialButton>(R.id.btnGuardar)
         val etApiKey = overlayView.findViewById<EditText>(R.id.etApiKey)
-
-        recycler.layoutManager = LinearLayoutManager(this).apply { stackFromEnd = true }
 
         val focusListener = View.OnFocusChangeListener { _, hasFocus ->
             params.flags = if (hasFocus)
@@ -90,7 +87,7 @@ class OverlayService : Service() {
         }
 
         fun selectTab(tab: Int) {
-            recycler.visibility = if (tab == 0) View.VISIBLE else View.GONE
+            scrollHistorial.visibility = if (tab == 0) View.VISIBLE else View.GONE
             panelAcciones.visibility = if (tab == 1) View.VISIBLE else View.GONE
             panelAjustes.visibility = if (tab == 2) View.VISIBLE else View.GONE
             val purple = 0xFF6750A4.toInt()
@@ -137,7 +134,10 @@ class OverlayService : Service() {
 
         btnSend.setOnClickListener {
             val text = input.text.toString().trim()
-            if (text.isNotEmpty()) input.setText("")
+            if (text.isNotEmpty()) {
+                tvHistorial.append("\nTú: $text")
+                input.setText("")
+            }
         }
 
         btnClose.setOnClickListener { stopSelf() }
@@ -166,7 +166,6 @@ class OverlayService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Corex activo")
-            .setContentText("Toca para cerrar")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cerrar", stopIntent)
             .setOngoing(true)
