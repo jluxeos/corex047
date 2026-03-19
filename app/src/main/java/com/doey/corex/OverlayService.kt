@@ -8,6 +8,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.*
 import android.view.animation.DecelerateInterpolator
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import kotlinx.coroutines.*
 
@@ -21,6 +22,7 @@ class OverlayService : Service() {
     private lateinit var cache: LearningCache
     private var pendingAsk: ((String) -> Unit)? = null
     private val history = mutableListOf<String>()
+    private lateinit var params: WindowManager.LayoutParams
 
     companion object {
         const val CHANNEL_ID = "corex_overlay"
@@ -42,18 +44,39 @@ class OverlayService : Service() {
     private fun setupOverlay() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_bar, null)
-        val params = WindowManager.LayoutParams(
+
+        // FLAG_NOT_TOUCH_MODAL permite tocar lo que está detrás del overlay
+        params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.BOTTOM }
+
         windowManager!!.addView(overlayView, params)
-        setupListeners(params)
+        setupListeners()
     }
 
-    private fun setupListeners(params: WindowManager.LayoutParams) {
+    private fun enableInput() {
+        params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        windowManager?.updateViewLayout(overlayView, params)
+    }
+
+    private fun disableInput() {
+        params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+        windowManager?.updateViewLayout(overlayView, params)
+        // Ocultar teclado
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        overlayView?.let { imm.hideSoftInputFromWindow(it.windowToken, 0) }
+    }
+
+    private fun setupListeners() {
         val v = overlayView!!
         val input = v.findViewById<EditText>(R.id.inputOverlay)
         val btnSend = v.findViewById<ImageButton>(R.id.btnSend)
@@ -72,14 +95,13 @@ class OverlayService : Service() {
         val btnGuardar = v.findViewById<Button>(R.id.btnGuardar)
         val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
-        val focusListener = View.OnFocusChangeListener { _, hasFocus ->
-            params.flags = if (hasFocus)
-                params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-            else params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            windowManager!!.updateViewLayout(overlayView, params)
+        // Al tocar el input, habilitar foco
+        input.setOnClickListener { enableInput() }
+        etApiKey.setOnClickListener { enableInput() }
+
+        input.setOnFocusChangeListener { _, hasFocus ->
+            if (!hasFocus) disableInput()
         }
-        input.onFocusChangeListener = focusListener
-        etApiKey.onFocusChangeListener = focusListener
 
         btnExpand.setOnClickListener {
             isExpanded = !isExpanded
@@ -129,8 +151,9 @@ class OverlayService : Service() {
             getSharedPreferences("corex_prefs", MODE_PRIVATE).edit()
                 .putString("api_key", etApiKey.text.toString().trim())
                 .putInt("delay", seekDelay.progress).apply()
-            addToHistory("Sistema", "Ajustes guardados")
-            updateHistory(tvHistorial)
+            disableInput()
+            addToHistory("Sistema", "Ajustes guardados ✓")
+            mainHandler.post { updateHistory(tvHistorial) }
         }
 
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
@@ -142,19 +165,19 @@ class OverlayService : Service() {
             val text = input.text.toString().trim()
             if (text.isEmpty()) return@setOnClickListener
             input.setText("")
+            disableInput()
 
             if (pendingAsk != null) {
                 val cb = pendingAsk!!
                 pendingAsk = null
-                btnSend.setImageResource(android.R.drawable.ic_menu_send)
                 addToHistory("Tú", text)
-                updateHistory(tvHistorial)
+                mainHandler.post { updateHistory(tvHistorial) }
                 cb(text)
                 return@setOnClickListener
             }
 
             addToHistory("Tú", text)
-            updateHistory(tvHistorial)
+            mainHandler.post { updateHistory(tvHistorial) }
             processGoal(text, tvHistorial)
         }
 
@@ -165,7 +188,7 @@ class OverlayService : Service() {
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
         val apiKey = prefs.getString("api_key", "") ?: ""
         if (apiKey.isEmpty()) {
-            addToHistory("Corex", "⚠ Ve a Ajustes y configura tu API key de Groq")
+            addToHistory("Corex", "⚠ Configura tu API key de Groq en Ajustes")
             mainHandler.post { updateHistory(tvHistorial) }
             return
         }
@@ -209,29 +232,28 @@ class OverlayService : Service() {
                 when {
                     action == "DONE" -> {
                         done = true
-                        mainHandler.post {
-                            addToHistory("Corex", "✅ Listo")
-                            updateHistory(tvHistorial)
-                        }
+                        mainHandler.post { addToHistory("Corex", "✅ Listo"); updateHistory(tvHistorial) }
                     }
                     action == "ASK" -> {
                         done = true
                         val question = decision.askUser.ifEmpty { value }
                         mainHandler.post {
-                            addToHistory("Corex", "❓ $question")
+                            addToHistory("Corex", "❓ $question\n(Responde con el número del elemento o instrucción)")
                             updateHistory(tvHistorial)
                             pendingAsk = { answer ->
-                                // Aprender la respuesta si parece un elemento de pantalla
                                 val currentPkg = CorexAccessibilityService.instance
                                     ?.rootInActiveWindow?.packageName?.toString() ?: ""
-                                if (answer.toIntOrNull() != null) {
-                                    val idx = answer.toInt()
+                                val idx = answer.toIntOrNull()
+                                if (idx != null) {
                                     val elements = CorexAccessibilityService.getScreenElements()
                                     if (idx < elements.size) {
                                         val el = elements[idx]
-                                        cache.learn(goal, currentPkg, idx, el.text.ifEmpty { el.contentDesc }, el.bounds.centerX().toFloat(), el.bounds.centerY().toFloat())
+                                        cache.learn(goal, currentPkg, idx,
+                                            el.text.ifEmpty { el.contentDesc },
+                                            el.bounds.centerX().toFloat(),
+                                            el.bounds.centerY().toFloat())
                                         CorexAccessibilityService.tapElement(idx)
-                                        addToHistory("Sistema", "Aprendí: '$goal' → elemento $idx")
+                                        addToHistory("Sistema", "✓ Aprendí: '$goal' → elemento $idx '${el.text.ifEmpty { el.contentDesc }}'")
                                         mainHandler.post { updateHistory(tvHistorial) }
                                         scope.launch {
                                             Thread.sleep(delay)
@@ -239,7 +261,7 @@ class OverlayService : Service() {
                                         }
                                     }
                                 } else {
-                                    scope.launch { processGoal("$goal. El usuario dice: $answer", tvHistorial) }
+                                    scope.launch { processGoal("$goal. Nota del usuario: $answer", tvHistorial) }
                                 }
                             }
                         }
@@ -252,54 +274,29 @@ class OverlayService : Service() {
                     action == "TAP" -> {
                         val idx = value.toIntOrNull()
                         if (idx != null) {
-                            val ok = CorexAccessibilityService.tapElement(idx)
-                            stepHistory.add("TAP($idx)=${if (ok) "OK" else "FAIL"}")
-                        } else {
-                            stepHistory.add("TAP(invalid)")
+                            CorexAccessibilityService.tapElement(idx)
+                            stepHistory.add("TAP($idx)")
                         }
                         Thread.sleep(500)
                     }
                     action == "TYPE" -> {
                         CorexAccessibilityService.typeText(value)
-                        stepHistory.add("TYPE($value)")
+                        stepHistory.add("TYPE")
                         Thread.sleep(300)
                     }
-                    action == "SCROLL_DOWN" -> {
-                        CorexAccessibilityService.scrollDown()
-                        stepHistory.add("SCROLL_DOWN")
-                        Thread.sleep(700)
-                    }
-                    action == "SCROLL_UP" -> {
-                        CorexAccessibilityService.scrollUp()
-                        stepHistory.add("SCROLL_UP")
-                        Thread.sleep(700)
-                    }
-                    action == "BACK" -> {
-                        CorexAccessibilityService.pressBack()
-                        stepHistory.add("BACK")
-                        Thread.sleep(500)
-                    }
-                    action == "HOME" -> {
-                        CorexAccessibilityService.pressHome()
-                        stepHistory.add("HOME")
-                        Thread.sleep(500)
-                    }
+                    action == "SCROLL_DOWN" -> { CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
+                    action == "SCROLL_UP" -> { CorexAccessibilityService.scrollUp(); stepHistory.add("SCROLL_UP"); Thread.sleep(700) }
+                    action == "BACK" -> { CorexAccessibilityService.pressBack(); stepHistory.add("BACK"); Thread.sleep(500) }
+                    action == "HOME" -> { CorexAccessibilityService.pressHome(); stepHistory.add("HOME"); Thread.sleep(500) }
                     else -> {
                         done = true
-                        mainHandler.post {
-                            addToHistory("Corex", "⛔ No pude completar la tarea")
-                            updateHistory(tvHistorial)
-                        }
+                        mainHandler.post { addToHistory("Corex", "⛔ No pude completar"); updateHistory(tvHistorial) }
                     }
                 }
 
-                // Detectar loop
                 if (stepHistory.size >= 3 && stepHistory.takeLast(3).all { it == stepHistory.last() }) {
                     done = true
-                    mainHandler.post {
-                        addToHistory("Corex", "⚠ Sin progreso — intenta ser más específico")
-                        updateHistory(tvHistorial)
-                    }
+                    mainHandler.post { addToHistory("Corex", "⚠ Sin progreso — sé más específico"); updateHistory(tvHistorial) }
                 }
             }
         }
@@ -311,7 +308,7 @@ class OverlayService : Service() {
     }
 
     private fun updateHistory(tv: TextView) {
-        tv.text = history.joinToString("\n")
+        tv.text = history.takeLast(20).joinToString("\n")
     }
 
     private fun createNotificationChannel() {
