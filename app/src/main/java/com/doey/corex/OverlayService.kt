@@ -3,15 +3,24 @@ package com.doey.corex
 import android.app.*
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.*
+import android.view.animation.DecelerateInterpolator
 import android.widget.*
-import android.widget.Button
+import kotlinx.coroutines.*
 
 class OverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
+    private var isExpanded = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var cache: LearningCache
+    private var pendingAsk: ((String) -> Unit)? = null
+    private val history = mutableListOf<String>()
 
     companion object {
         const val CHANNEL_ID = "corex_overlay"
@@ -20,19 +29,19 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        cache = LearningCache(this)
         try {
             createNotificationChannel()
-            startForeground(NOTIF_ID, buildNotification("Iniciando..."))
+            startForeground(NOTIF_ID, buildNotification("Corex activo"))
             setupOverlay()
-            updateNotification("Corex activo ✓")
         } catch (e: Exception) {
-            updateNotification("Error: ${e.javaClass.simpleName}: ${e.message?.take(50)}")
+            updateNotification("Error: ${e.javaClass.simpleName}: ${e.message?.take(60)}")
         }
     }
 
     private fun setupOverlay() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
+        overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_bar, null)
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -40,77 +49,78 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.BOTTOM }
-
-        overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_bar, null)
         windowManager!!.addView(overlayView, params)
         setupListeners(params)
     }
 
     private fun setupListeners(params: WindowManager.LayoutParams) {
-        val input = overlayView!!.findViewById<EditText>(R.id.inputOverlay)
-        val btnSend = overlayView!!.findViewById<ImageButton>(R.id.btnSend)
-        val btnClose = overlayView!!.findViewById<ImageButton>(R.id.btnClose)
-        val btnExpand = overlayView!!.findViewById<ImageButton>(R.id.btnExpand)
-        val panelExpanded = overlayView!!.findViewById<View>(R.id.panelExpanded)
-        val panelAcciones = overlayView!!.findViewById<View>(R.id.panelAcciones)
-        val panelAjustes = overlayView!!.findViewById<View>(R.id.panelAjustes)
-        val scrollHistorial = overlayView!!.findViewById<View>(R.id.scrollHistorial)
-        val tvHistorial = overlayView!!.findViewById<TextView>(R.id.tvHistorial)
-        val tabHistorial = overlayView!!.findViewById<TextView>(R.id.tabHistorial)
-        val tabAcciones = overlayView!!.findViewById<TextView>(R.id.tabAcciones)
-        val tabAjustes = overlayView!!.findViewById<TextView>(R.id.tabAjustes)
-        val seekDelay = overlayView!!.findViewById<SeekBar>(R.id.seekDelay)
-        val tvDelayVal = overlayView!!.findViewById<TextView>(R.id.tvDelayVal)
-        val btnGuardar = overlayView!!.findViewById<Button>(R.id.btnGuardar)
-        val etApiKey = overlayView!!.findViewById<EditText>(R.id.etApiKey)
+        val v = overlayView!!
+        val input = v.findViewById<EditText>(R.id.inputOverlay)
+        val btnSend = v.findViewById<ImageButton>(R.id.btnSend)
+        val btnClose = v.findViewById<ImageButton>(R.id.btnClose)
+        val btnExpand = v.findViewById<ImageButton>(R.id.btnExpand)
+        val panelExpanded = v.findViewById<View>(R.id.panelExpanded)
+        val panelAcciones = v.findViewById<View>(R.id.panelAcciones)
+        val panelAjustes = v.findViewById<View>(R.id.panelAjustes)
+        val scrollHistorial = v.findViewById<View>(R.id.scrollHistorial)
+        val tvHistorial = v.findViewById<TextView>(R.id.tvHistorial)
+        val tabHistorial = v.findViewById<TextView>(R.id.tabHistorial)
+        val tabAcciones = v.findViewById<TextView>(R.id.tabAcciones)
+        val tabAjustes = v.findViewById<TextView>(R.id.tabAjustes)
+        val seekDelay = v.findViewById<SeekBar>(R.id.seekDelay)
+        val tvDelayVal = v.findViewById<TextView>(R.id.tvDelayVal)
+        val btnGuardar = v.findViewById<Button>(R.id.btnGuardar)
+        val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
         val focusListener = View.OnFocusChangeListener { _, hasFocus ->
             params.flags = if (hasFocus)
                 params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
-            else
-                params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            else params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
             windowManager!!.updateViewLayout(overlayView, params)
         }
         input.onFocusChangeListener = focusListener
         etApiKey.onFocusChangeListener = focusListener
 
-        var isExpanded = false
         btnExpand.setOnClickListener {
             isExpanded = !isExpanded
-            panelExpanded.visibility = if (isExpanded) View.VISIBLE else View.GONE
-            btnExpand.setImageResource(
-                if (isExpanded) android.R.drawable.arrow_down_float
-                else android.R.drawable.arrow_up_float
-            )
+            if (isExpanded) {
+                panelExpanded.visibility = View.VISIBLE
+                panelExpanded.alpha = 0f
+                panelExpanded.animate().alpha(1f).setDuration(250)
+                    .setInterpolator(DecelerateInterpolator()).start()
+                btnExpand.setImageResource(android.R.drawable.arrow_down_float)
+            } else {
+                panelExpanded.animate().alpha(0f).setDuration(200)
+                    .withEndAction { panelExpanded.visibility = View.GONE }.start()
+                btnExpand.setImageResource(android.R.drawable.arrow_up_float)
+            }
         }
 
         fun selectTab(tab: Int) {
             scrollHistorial.visibility = if (tab == 0) View.VISIBLE else View.GONE
             panelAcciones.visibility = if (tab == 1) View.VISIBLE else View.GONE
             panelAjustes.visibility = if (tab == 2) View.VISIBLE else View.GONE
-            tabHistorial.setTextColor(if (tab == 0) 0xFF6750A4.toInt() else 0xFF79747E.toInt())
-            tabAcciones.setTextColor(if (tab == 1) 0xFF6750A4.toInt() else 0xFF79747E.toInt())
-            tabAjustes.setTextColor(if (tab == 2) 0xFF6750A4.toInt() else 0xFF79747E.toInt())
+            val p = 0xFF6750A4.toInt(); val g = 0xFF79747E.toInt()
+            tabHistorial.setTextColor(if (tab == 0) p else g)
+            tabAcciones.setTextColor(if (tab == 1) p else g)
+            tabAjustes.setTextColor(if (tab == 2) p else g)
         }
-
         tabHistorial.setOnClickListener { selectTab(0) }
         tabAcciones.setOnClickListener { selectTab(1) }
         tabAjustes.setOnClickListener { selectTab(2) }
 
-        overlayView!!.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener {
-            launchApp("com.whatsapp")
+        v.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener {
+            CorexAccessibilityService.openAppByName("WhatsApp")
         }
-        overlayView!!.findViewById<Button>(R.id.btnMaps).setOnClickListener {
-            launchApp("com.google.android.apps.maps")
+        v.findViewById<Button>(R.id.btnMaps).setOnClickListener {
+            CorexAccessibilityService.openAppByName("Maps")
         }
-        overlayView!!.findViewById<Button>(R.id.btnYoutube).setOnClickListener {
-            launchApp("com.google.android.youtube")
+        v.findViewById<Button>(R.id.btnYoutube).setOnClickListener {
+            CorexAccessibilityService.openAppByName("YouTube")
         }
 
         seekDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                tvDelayVal.text = "${progress}ms"
-            }
+            override fun onProgressChanged(sb: SeekBar?, p: Int, f: Boolean) { tvDelayVal.text = "${p}ms" }
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
@@ -118,9 +128,9 @@ class OverlayService : Service() {
         btnGuardar.setOnClickListener {
             getSharedPreferences("corex_prefs", MODE_PRIVATE).edit()
                 .putString("api_key", etApiKey.text.toString().trim())
-                .putInt("delay", seekDelay.progress)
-                .apply()
-            Toast.makeText(this, "Guardado", Toast.LENGTH_SHORT).show()
+                .putInt("delay", seekDelay.progress).apply()
+            addToHistory("Sistema", "Ajustes guardados")
+            updateHistory(tvHistorial)
         }
 
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
@@ -130,24 +140,178 @@ class OverlayService : Service() {
 
         btnSend.setOnClickListener {
             val text = input.text.toString().trim()
-            if (text.isNotEmpty()) {
-                tvHistorial.append("\nTú: $text")
-                input.setText("")
+            if (text.isEmpty()) return@setOnClickListener
+            input.setText("")
+
+            if (pendingAsk != null) {
+                val cb = pendingAsk!!
+                pendingAsk = null
+                btnSend.setImageResource(android.R.drawable.ic_menu_send)
+                addToHistory("Tú", text)
+                updateHistory(tvHistorial)
+                cb(text)
+                return@setOnClickListener
             }
+
+            addToHistory("Tú", text)
+            updateHistory(tvHistorial)
+            processGoal(text, tvHistorial)
         }
 
         btnClose.setOnClickListener { stopSelf() }
     }
 
-    private fun launchApp(packageName: String) {
-        try {
-            val intent = packageManager.getLaunchIntentForPackage(packageName)
-                ?: throw Exception("No instalada")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+    private fun processGoal(goal: String, tvHistorial: TextView) {
+        val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        if (apiKey.isEmpty()) {
+            addToHistory("Corex", "⚠ Ve a Ajustes y configura tu API key de Groq")
+            mainHandler.post { updateHistory(tvHistorial) }
+            return
         }
+
+        val delay = prefs.getInt("delay", 400).toLong()
+        addToHistory("Corex", "Analizando...")
+        mainHandler.post { updateHistory(tvHistorial) }
+
+        scope.launch {
+            var maxSteps = 15
+            var done = false
+            val stepHistory = mutableListOf<String>()
+
+            while (!done && maxSteps > 0) {
+                maxSteps--
+                Thread.sleep(delay)
+
+                val dump = CorexAccessibilityService.getDumpForAI()
+                val learned = cache.getSummary()
+                val histStr = stepHistory.takeLast(4).joinToString(" → ")
+
+                var responded = false
+                var decision = GroqClient.Decision("FAIL", "timeout")
+
+                GroqClient.decide(goal, dump, histStr, learned, apiKey) { d ->
+                    decision = d
+                    responded = true
+                }
+
+                val timeout = System.currentTimeMillis() + 8000
+                while (!responded && System.currentTimeMillis() < timeout) Thread.sleep(100)
+
+                val action = decision.action
+                val value = decision.value
+
+                mainHandler.post {
+                    addToHistory("▶", "$action: $value")
+                    updateHistory(tvHistorial)
+                }
+
+                when {
+                    action == "DONE" -> {
+                        done = true
+                        mainHandler.post {
+                            addToHistory("Corex", "✅ Listo")
+                            updateHistory(tvHistorial)
+                        }
+                    }
+                    action == "ASK" -> {
+                        done = true
+                        val question = decision.askUser.ifEmpty { value }
+                        mainHandler.post {
+                            addToHistory("Corex", "❓ $question")
+                            updateHistory(tvHistorial)
+                            pendingAsk = { answer ->
+                                // Aprender la respuesta si parece un elemento de pantalla
+                                val currentPkg = CorexAccessibilityService.instance
+                                    ?.rootInActiveWindow?.packageName?.toString() ?: ""
+                                if (answer.toIntOrNull() != null) {
+                                    val idx = answer.toInt()
+                                    val elements = CorexAccessibilityService.getScreenElements()
+                                    if (idx < elements.size) {
+                                        val el = elements[idx]
+                                        cache.learn(goal, currentPkg, idx, el.text.ifEmpty { el.contentDesc }, el.bounds.centerX().toFloat(), el.bounds.centerY().toFloat())
+                                        CorexAccessibilityService.tapElement(idx)
+                                        addToHistory("Sistema", "Aprendí: '$goal' → elemento $idx")
+                                        mainHandler.post { updateHistory(tvHistorial) }
+                                        scope.launch {
+                                            Thread.sleep(delay)
+                                            processGoal(goal, tvHistorial)
+                                        }
+                                    }
+                                } else {
+                                    scope.launch { processGoal("$goal. El usuario dice: $answer", tvHistorial) }
+                                }
+                            }
+                        }
+                    }
+                    action == "OPEN_APP" -> {
+                        val result = CorexAccessibilityService.openAppByName(value)
+                        stepHistory.add("OPEN_APP($value)=$result")
+                        Thread.sleep(1500)
+                    }
+                    action == "TAP" -> {
+                        val idx = value.toIntOrNull()
+                        if (idx != null) {
+                            val ok = CorexAccessibilityService.tapElement(idx)
+                            stepHistory.add("TAP($idx)=${if (ok) "OK" else "FAIL"}")
+                        } else {
+                            stepHistory.add("TAP(invalid)")
+                        }
+                        Thread.sleep(500)
+                    }
+                    action == "TYPE" -> {
+                        CorexAccessibilityService.typeText(value)
+                        stepHistory.add("TYPE($value)")
+                        Thread.sleep(300)
+                    }
+                    action == "SCROLL_DOWN" -> {
+                        CorexAccessibilityService.scrollDown()
+                        stepHistory.add("SCROLL_DOWN")
+                        Thread.sleep(700)
+                    }
+                    action == "SCROLL_UP" -> {
+                        CorexAccessibilityService.scrollUp()
+                        stepHistory.add("SCROLL_UP")
+                        Thread.sleep(700)
+                    }
+                    action == "BACK" -> {
+                        CorexAccessibilityService.pressBack()
+                        stepHistory.add("BACK")
+                        Thread.sleep(500)
+                    }
+                    action == "HOME" -> {
+                        CorexAccessibilityService.pressHome()
+                        stepHistory.add("HOME")
+                        Thread.sleep(500)
+                    }
+                    else -> {
+                        done = true
+                        mainHandler.post {
+                            addToHistory("Corex", "⛔ No pude completar la tarea")
+                            updateHistory(tvHistorial)
+                        }
+                    }
+                }
+
+                // Detectar loop
+                if (stepHistory.size >= 3 && stepHistory.takeLast(3).all { it == stepHistory.last() }) {
+                    done = true
+                    mainHandler.post {
+                        addToHistory("Corex", "⚠ Sin progreso — intenta ser más específico")
+                        updateHistory(tvHistorial)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun addToHistory(who: String, msg: String) {
+        history.add("$who: $msg")
+        if (history.size > 50) history.removeAt(0)
+    }
+
+    private fun updateHistory(tv: TextView) {
+        tv.text = history.joinToString("\n")
     }
 
     private fun createNotificationChannel() {
@@ -171,8 +335,7 @@ class OverlayService : Service() {
     }
 
     private fun updateNotification(text: String) {
-        getSystemService(NotificationManager::class.java)
-            .notify(NOTIF_ID, buildNotification(text))
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -184,6 +347,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        scope.cancel()
         try { overlayView?.let { windowManager?.removeView(it) } } catch (e: Exception) {}
     }
 }
