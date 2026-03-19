@@ -8,6 +8,182 @@
     android:paddingBottom="16dp">
 
     <LinearLayout
+        android:id="@+id/panelExpanded"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="@drawable/overlay_bg"
+        android:layout_marginBottom="8dp"
+        android:elevation="8dp">
+
+        <View
+            android:layout_width="40dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
+            android:background="#79747E"
+            android:alpha="0.4"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:orientation="horizontal"
+            android:paddingHorizontal="16dp">
+
+            <TextView
+                android:id="@+id/tabHistorial"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="Historial"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#6750A4"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/tabAcciones"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="Acciones"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#79747E"/>
+
+            <TextView
+                android:id="@+id/tabAjustes"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="Ajustes"
+                android:gravity="center"
+                android:textSize="13sp"
+                android:textColor="#79747E"/>
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#E7E0EC"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerHistorial"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:clipToPadding="false"/>
+
+        <LinearLayout
+            android:id="@+id/panelAcciones"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnWhatsApp"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Abrir WhatsApp"
+                android:layout_marginBottom="8dp"
+                app:cornerRadius="24dp"
+                style="@style/Widget.Material3.Button.TonalButton"
+                xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnMaps"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Abrir Maps"
+                android:layout_marginBottom="8dp"
+                app:cornerRadius="24dp"
+                style="@style/Widget.Material3.Button.TonalButton"
+                xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnYoutube"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="Abrir YouTube"
+                app:cornerRadius="24dp"
+                style="@style/Widget.Material3.Button.TonalButton"
+                xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/panelAjustes"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="API Key (Groq)"
+                android:textSize="12sp"
+                android:textColor="#6750A4"
+                android:layout_marginBottom="4dp"/>
+
+            <EditText
+                android:id="@+id/etApiKey"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:hint="gsk_..."
+                android:textSize="13sp"
+                android:background="@drawable/input_bg"
+                android:paddingHorizontal="12dp"
+                android:inputType="textPassword"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Delay entre acciones"
+                android:textSize="12sp"
+                android:textColor="#6750A4"
+                android:layout_marginBottom="4dp"/>
+
+            <SeekBar
+                android:id="@+id/seekDelay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="1500"
+                android:progress="400"
+                android:progressTint="#6750A4"
+                android:thumbTint="#6750A4"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:id="@+id/tvDelayVal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="400ms"
+                android:textSize="12sp"
+                android:textColor="#79747E"
+                android:layout_marginBottom="16dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnGuardar"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:text="Guardar"
+                app:cornerRadius="22dp"
+                xmlns:app="http://schemas.android.com/apk/res-auto"/>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:orientation="horizontal"
@@ -23,7 +199,7 @@
             android:src="@android:drawable/ic_menu_close_clear_cancel"
             android:background="@android:color/transparent"
             android:padding="6dp"
-            android:tint="#79747E" />
+            android:tint="#79747E"/>
 
         <EditText
             android:id="@+id/inputOverlay"
@@ -36,7 +212,16 @@
             android:singleLine="true"
             android:paddingHorizontal="8dp"
             android:textColor="#1C1B1F"
-            android:textColorHint="#79747E" />
+            android:textColorHint="#79747E"/>
+
+        <ImageButton
+            android:id="@+id/btnExpand"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:src="@android:drawable/arrow_up_float"
+            android:background="@android:color/transparent"
+            android:padding="6dp"
+            android:tint="#6750A4"/>
 
         <ImageButton
             android:id="@+id/btnSend"
@@ -45,7 +230,7 @@
             android:src="@android:drawable/ic_menu_send"
             android:background="@drawable/btn_send_bg"
             android:padding="8dp"
-            android:tint="#FFFFFF" />
+            android:tint="#FFFFFF"/>
 
     </LinearLayout>
 
