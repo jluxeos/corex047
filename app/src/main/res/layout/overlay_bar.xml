@@ -93,28 +93,28 @@
             android:padding="16dp"
             android:visibility="gone">
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnWhatsApp"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="Abrir WhatsApp"
                 android:layout_marginBottom="8dp"
-                style="@style/Widget.Material3.Button.TonalButton"/>
+                android:background="@drawable/btn_tonal_bg"/>
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnMaps"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="Abrir Maps"
                 android:layout_marginBottom="8dp"
-                style="@style/Widget.Material3.Button.TonalButton"/>
+                android:background="@drawable/btn_tonal_bg"/>
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnYoutube"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:text="Abrir YouTube"
-                style="@style/Widget.Material3.Button.TonalButton"/>
+                android:background="@drawable/btn_tonal_bg"/>
 
         </LinearLayout>
 
@@ -164,12 +164,13 @@
                 android:textColor="#79747E"
                 android:layout_marginBottom="12dp"/>
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnGuardar"
                 android:layout_width="match_parent"
                 android:layout_height="44dp"
                 android:text="Guardar"
-                app:cornerRadius="22dp"/>
+                android:background="@drawable/btn_send_bg"
+                android:textColor="#FFFFFF"/>
 
         </LinearLayout>
 

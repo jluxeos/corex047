@@ -6,7 +6,7 @@ import android.graphics.PixelFormat
 import android.os.IBinder
 import android.view.*
 import android.widget.*
-import com.google.android.material.button.MaterialButton
+import android.widget.Button
 
 class OverlayService : Service() {
 
@@ -61,7 +61,7 @@ class OverlayService : Service() {
         val tabAjustes = overlayView!!.findViewById<TextView>(R.id.tabAjustes)
         val seekDelay = overlayView!!.findViewById<SeekBar>(R.id.seekDelay)
         val tvDelayVal = overlayView!!.findViewById<TextView>(R.id.tvDelayVal)
-        val btnGuardar = overlayView!!.findViewById<MaterialButton>(R.id.btnGuardar)
+        val btnGuardar = overlayView!!.findViewById<Button>(R.id.btnGuardar)
         val etApiKey = overlayView!!.findViewById<EditText>(R.id.etApiKey)
 
         val focusListener = View.OnFocusChangeListener { _, hasFocus ->
@@ -97,13 +97,13 @@ class OverlayService : Service() {
         tabAcciones.setOnClickListener { selectTab(1) }
         tabAjustes.setOnClickListener { selectTab(2) }
 
-        overlayView!!.findViewById<MaterialButton>(R.id.btnWhatsApp).setOnClickListener {
+        overlayView!!.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener {
             launchApp("com.whatsapp")
         }
-        overlayView!!.findViewById<MaterialButton>(R.id.btnMaps).setOnClickListener {
+        overlayView!!.findViewById<Button>(R.id.btnMaps).setOnClickListener {
             launchApp("com.google.android.apps.maps")
         }
-        overlayView!!.findViewById<MaterialButton>(R.id.btnYoutube).setOnClickListener {
+        overlayView!!.findViewById<Button>(R.id.btnYoutube).setOnClickListener {
             launchApp("com.google.android.youtube")
         }
 
