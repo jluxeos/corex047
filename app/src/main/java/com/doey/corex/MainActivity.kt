@@ -18,22 +18,32 @@ class MainActivity : AppCompatActivity() {
         val btnAjustes = findViewById<MaterialButton>(R.id.btnAjustes)
 
         btnActivar.setOnClickListener {
-            if (!Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
-                Toast.makeText(this, "Activa el permiso y vuelve", Toast.LENGTH_LONG).show()
-            } else {
-                startForegroundService(Intent(this, OverlayService::class.java))
-                Toast.makeText(this, "Corex activado", Toast.LENGTH_SHORT).show()
-                finish()
-            }
+            activarCorex()
         }
 
         btnAjustes.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Cuando regresa del permiso, activar automáticamente
+        if (Settings.canDrawOverlays(this)) {
+            activarCorex()
+        }
+    }
+
+    private fun activarCorex() {
+        if (!Settings.canDrawOverlays(this)) {
+            startActivity(Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            ))
+        } else {
+            startForegroundService(Intent(this, OverlayService::class.java))
+            Toast.makeText(this, "Corex activado ⚡", Toast.LENGTH_SHORT).show()
+            finish()
         }
     }
 }
