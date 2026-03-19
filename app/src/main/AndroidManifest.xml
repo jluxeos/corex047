@@ -7,8 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
-        tools:ignore="ProtectedPermissions"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -28,22 +27,13 @@
             </intent-filter>
         </activity>
 
-        <!-- Asistente predeterminado del sistema -->
         <activity
             android:name=".AssistantActivity"
             android:exported="true"
             android:theme="@style/Theme.Corex.Transparent"
             android:launchMode="singleTask">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.VOICE_ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
