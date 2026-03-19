@@ -6,18 +6,13 @@ import android.graphics.PixelFormat
 import android.os.IBinder
 import android.util.Log
 import android.view.*
-import android.view.animation.DecelerateInterpolator
 import android.widget.EditText
-import androidx.cardview.widget.CardView
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.button.MaterialButton
+import android.widget.ImageButton
 
 class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
     private lateinit var overlayView: View
-    private var isExpanded = false
 
     companion object {
         const val CHANNEL_ID = "corex_overlay"
@@ -28,98 +23,52 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
-        try {
-            createNotificationChannel()
-            startForeground(NOTIF_ID, buildNotification())
-            setupOverlay()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error en onCreate: ${e.message}", e)
-        }
+        createNotificationChannel()
+        startForeground(NOTIF_ID, buildNotification())
+        setupOverlay()
     }
 
     private fun setupOverlay() {
-        Log.d(TAG, "setupOverlay")
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        val inflater = LayoutInflater.from(this)
-        overlayView = inflater.inflate(R.layout.overlay_bar, null)
+        overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_bar, null)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
+        ).apply { gravity = Gravity.BOTTOM }
 
         windowManager.addView(overlayView, params)
-        Log.d(TAG, "Overlay añadido")
-        setupListeners(params)
-    }
+        Log.d(TAG, "Overlay añadido OK")
 
-    private fun setupListeners(params: WindowManager.LayoutParams) {
-        val btnExpand = overlayView.findViewById<MaterialButton>(R.id.btnExpand)
-        val btnSend = overlayView.findViewById<MaterialButton>(R.id.btnSend)
-        val inputOverlay = overlayView.findViewById<EditText>(R.id.inputOverlay)
-        val cardHistory = overlayView.findViewById<CardView>(R.id.cardHistory)
+        val input = overlayView.findViewById<EditText>(R.id.inputOverlay)
+        val btnSend = overlayView.findViewById<ImageButton>(R.id.btnSend)
 
-        inputOverlay.setOnFocusChangeListener { _, hasFocus ->
-            val flags = if (hasFocus)
+        input.setOnFocusChangeListener { _, hasFocus ->
+            params.flags = if (hasFocus)
                 params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
             else
                 params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-            params.flags = flags
             windowManager.updateViewLayout(overlayView, params)
         }
 
-        btnExpand.setOnClickListener {
-            isExpanded = !isExpanded
-            if (isExpanded) {
-                cardHistory.visibility = View.VISIBLE
-                cardHistory.alpha = 0f
-                cardHistory.animate().alpha(1f).setDuration(250)
-                    .setInterpolator(DecelerateInterpolator()).start()
-            } else {
-                cardHistory.animate().alpha(0f).setDuration(200)
-                    .withEndAction { cardHistory.visibility = View.GONE }.start()
-            }
-        }
-
         btnSend.setOnClickListener {
-            val text = inputOverlay.text.toString().trim()
-            if (text.isNotEmpty()) {
-                inputOverlay.setText("")
-            }
+            val text = input.text.toString().trim()
+            if (text.isNotEmpty()) input.setText("")
         }
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID, "Corex Activo",
-            NotificationManager.IMPORTANCE_MIN
-        ).apply {
-            setShowBadge(false)
-            enableLights(false)
-            enableVibration(false)
-        }
+        val channel = NotificationChannel(CHANNEL_ID, "Corex Activo", NotificationManager.IMPORTANCE_MIN)
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
-        val intent = PendingIntent.getActivity(
-            this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Corex activo")
-            .setContentText("Toca para abrir")
             .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setContentIntent(intent)
             .setOngoing(true)
             .build()
     }
@@ -128,7 +77,6 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d(TAG, "onDestroy")
         if (::overlayView.isInitialized) {
             try { windowManager.removeView(overlayView) } catch (e: Exception) {}
         }
