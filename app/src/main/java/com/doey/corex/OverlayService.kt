@@ -252,10 +252,9 @@ class OverlayService : Service() {
         tabDebug.setOnClickListener {
             selectTab(1)
             val crash = CrashHandler.readLastCrash(this@OverlayService)
-            tvDebug?.text = "=== CRASH ===
+            tvDebug?.text = "=== CRASH ===" + "
 " + crash + "
-
-=== DEBUG ===
+" + "=== DEBUG ===" + "
 " + DebugLog.getLastEntries(30)
         }
         tabAjustes.setOnClickListener { selectTab(2) }
