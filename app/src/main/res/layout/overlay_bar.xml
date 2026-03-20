@@ -8,6 +8,7 @@
     android:paddingHorizontal="12dp"
     android:paddingBottom="16dp">
 
+    <!-- Panel expandido -->
     <LinearLayout
         android:id="@+id/panelExpanded"
         android:layout_width="match_parent"
@@ -81,8 +82,9 @@
                 android:layout_height="wrap_content"
                 android:padding="16dp"
                 android:text="Sin historial aún"
-                android:textSize="13sp"
-                android:textColor="#79747E"/>
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:textColor="#1C1B1F"/>
         </ScrollView>
 
         <LinearLayout
@@ -176,6 +178,43 @@
 
     </LinearLayout>
 
+    <!-- Panel de selección visual (aparece cuando la IA necesita ayuda) -->
+    <LinearLayout
+        android:id="@+id/panelPicker"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="@drawable/overlay_bg"
+        android:layout_marginBottom="8dp"
+        android:elevation="8dp"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tvPickerTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="¿Cuál es la correcta?"
+            android:textSize="13sp"
+            android:textColor="#6750A4"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:id="@+id/pickerButtons"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"/>
+
+        </HorizontalScrollView>
+
+    </LinearLayout>
+
+    <!-- Barra principal -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"
