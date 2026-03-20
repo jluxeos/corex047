@@ -132,7 +132,7 @@ class OverlayService : Service() {
                 setOnClickListener { hidePicker(); onChoice(null) }
             }
             pickerButtons?.addView(noneBtn)
-            elements.take(12).forEach { el ->
+            elements.take(12).forEach { el: CorexAccessibilityService.ScreenElement ->
                 val label = el.text.ifEmpty { el.contentDesc }.take(20)
                 val btn = Button(this).apply {
                     text = "${el.index}. $label"
@@ -385,7 +385,7 @@ class OverlayService : Service() {
                         showElementPicker(
                             decision.askUser.ifEmpty { "¿Cuál debo tocar?" },
                             elements
-                        ) { chosen ->
+                        ) { chosen: CorexAccessibilityService.ScreenElement? ->
                             if (chosen != null) {
                                 val currentPkg = CorexAccessibilityService.instance
                                     ?.rootInActiveWindow?.packageName?.toString() ?: ""
