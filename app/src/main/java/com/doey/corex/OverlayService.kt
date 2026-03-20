@@ -669,7 +669,7 @@ class OverlayService : Service() {
         chatMessages.add(msg)
         if (chatMessages.size > 100) chatMessages.removeAt(0)
         mainHandler.post {
-            tvChat?.text = chatMessages.joinToString("
+            tvChat?.text = chatMessages.joinToString("\n\n")
 
 ")
             scrollChat?.post { scrollChat?.fullScroll(android.view.View.FOCUS_DOWN) }
