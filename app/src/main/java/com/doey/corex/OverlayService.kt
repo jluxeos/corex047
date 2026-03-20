@@ -560,6 +560,8 @@ class OverlayService : Service() {
                     }
                     "TAP" -> {
                         val idx = decision.value.toIntOrNull()
+                        numberOverlay.show(elements) {}
+                        Thread.sleep(600)
                         if (idx != null && idx < elements.size) {
                             val el = elements[idx]
                             val label = el.text.ifEmpty { el.contentDesc }
