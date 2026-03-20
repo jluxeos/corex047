@@ -297,13 +297,16 @@ class OverlayService : Service() {
 
     private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
         return try {
-            packageManager.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
-            ).map { info ->
+            val pm = applicationContext.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val flags = android.content.pm.PackageManager.GET_META_DATA
+            val apps = pm.queryIntentActivities(intent, flags)
+            DebugLog.log("getApps", "Total encontradas: ${apps.size}")
+            apps.map { info ->
                 Triple(
-                    info.loadLabel(packageManager).toString(),
+                    info.loadLabel(pm).toString(),
                     info.activityInfo.packageName,
-                    try { info.loadIcon(packageManager) } catch (e: Exception) { null }
+                    try { info.loadIcon(pm) } catch (e: Exception) { null }
                 )
             }.sortedBy { it.first }
         } catch (e: Exception) {
