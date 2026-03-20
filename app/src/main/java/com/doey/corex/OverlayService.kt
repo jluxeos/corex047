@@ -298,21 +298,17 @@ class OverlayService : Service() {
     private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
         return try {
             val pm = applicationContext.packageManager
-            // Usar MATCH_ALL para obtener TODAS las apps instaladas
-            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val apps = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL)
-            } else {
-                pm.queryIntentActivities(intent, 0)
+            // Obtener todos los paquetes instalados y filtrar los que tienen launcher
+            val packages = pm.getInstalledPackages(android.content.pm.PackageManager.GET_ACTIVITIES)
+            val result = mutableListOf<Triple<String, String, Drawable?>>()
+            for (pkg in packages) {
+                val launchIntent = pm.getLaunchIntentForPackage(pkg.packageName) ?: continue
+                val label = pm.getApplicationLabel(pkg.applicationInfo).toString()
+                val icon = try { pm.getApplicationIcon(pkg.packageName) } catch (e: Exception) { null }
+                result.add(Triple(label, pkg.packageName, icon))
             }
-            DebugLog.log("getApps", "Total: ${apps.size}")
-            apps.map { info ->
-                Triple(
-                    info.loadLabel(pm).toString(),
-                    info.activityInfo.packageName,
-                    try { info.loadIcon(pm) } catch (e: Exception) { null }
-                )
-            }.sortedBy { it.first }
+            DebugLog.log("getApps", "Total: ${result.size}")
+            result.sortedBy { it.first }
         } catch (e: Exception) {
             DebugLog.logError("getAppsWithIcons", e)
             emptyList()
