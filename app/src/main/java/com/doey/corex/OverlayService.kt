@@ -297,16 +297,20 @@ class OverlayService : Service() {
     }
 
     private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
-        val svc = CorexAccessibilityService.instance ?: return emptyList()
-        return svc.packageManager.queryIntentActivities(
-            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
-        ).map { info ->
-            Triple(
-                info.loadLabel(svc.packageManager).toString(),
-                info.activityInfo.packageName,
-                try { info.loadIcon(svc.packageManager) } catch (e: Exception) { null }
-            )
-        }.sortedBy { it.first }
+        return try {
+            packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            ).map { info ->
+                Triple(
+                    info.loadLabel(packageManager).toString(),
+                    info.activityInfo.packageName,
+                    try { info.loadIcon(packageManager) } catch (e: Exception) { null }
+                )
+            }.sortedBy { it.first }
+        } catch (e: Exception) {
+            DebugLog.logError("getAppsWithIcons", e)
+            emptyList()
+        }
     }
 
     private fun launchApp(name: String) {
@@ -329,23 +333,24 @@ class OverlayService : Service() {
             }
 
             val apps = getAppsWithIcons()
-            if (apps.isEmpty()) { addLog("⚠", "Activa el servicio de accesibilidad"); return@launch }
+            if (apps.isEmpty()) { addLog("⚠", "No pude obtener lista de apps"); return@launch }
+            DebugLog.log("launchApp", "Apps encontradas: ${apps.size}")
 
             if (apiKey.isNotEmpty()) {
                 val appListStr = apps.joinToString("\n") { "${it.first}|${it.second}" }
                 DebugLog.log("launchApp", "Consultando IA para: $name")
                 GroqClient.chooseApp(name, appListStr, apiKey) { pkg: String ->
                     DebugLog.log("launchApp", "IA eligió: $pkg")
-                    val svc = CorexAccessibilityService.instance ?: return@chooseApp
+                    @Suppress("UNUSED_VARIABLE") val svc = CorexAccessibilityService.instance
                     if (pkg != "NONE" && pkg.contains(".")) {
                         val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
                         showConfirmation("¿Es este $name?\n→ $appLabel", {
-                            launchPkg(pkg, name)
+                            scope.launch { launchPkg(pkg, name) }
                             cache.learn("open_$name", pkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $appLabel")
                         }, {
                             showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
-                                launchPkg(chosenPkg, name)
+                                scope.launch { launchPkg(chosenPkg, name) }
                                 val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                                 cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                                 addLog("✓ Aprendí", "$name = $label")
@@ -353,7 +358,7 @@ class OverlayService : Service() {
                         })
                     } else {
                         showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
-                            launchPkg(chosenPkg, name)
+                            scope.launch { launchPkg(chosenPkg, name) }
                             val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $label")
@@ -373,13 +378,18 @@ class OverlayService : Service() {
 
     private fun launchPkg(pkg: String, name: String) {
         try {
-            val svc = CorexAccessibilityService.instance ?: return
-            val intent = svc.packageManager.getLaunchIntentForPackage(pkg) ?: return
+            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: run {
+                addLog("⚠", "No encontré $pkg")
+                return
+            }
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             applicationContext.startActivity(intent)
             addLog("✓ Abrí", name)
             DebugLog.log("launchPkg", "OK: $pkg")
-        } catch (e: Exception) { DebugLog.logError("launchPkg", e) }
+        } catch (e: Exception) {
+            DebugLog.logError("launchPkg", e)
+            addLog("⛔ Error", e.message ?: "")
+        }
     }
 
     private fun processGoal(goal: String) {
