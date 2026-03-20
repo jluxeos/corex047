@@ -403,7 +403,7 @@ class OverlayService : Service() {
                                     // No — mostrar picker
                                     showElementPicker("¿Cuál es el correcto?", elements) { chosen: ScreenElement? ->
                                         if (chosen != null) {
-                                            cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }), chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
+                                            cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }, chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
                                             CorexAccessibilityService.tapElement(chosen.index)
                                             addLog("✓ Aprendí", "#${chosen.index}")
                                             scope.launch { Thread.sleep(delay); processGoal(goal) }
