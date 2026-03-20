@@ -335,14 +335,21 @@ class OverlayService : Service() {
         scope.launch {
             val cached = cache.getAll().firstOrNull { it.key.equals("open_$name", ignoreCase = true) || it.key.equals("open_${name.lowercase()}", ignoreCase = true) }
             if (cached != null && cached.packageName.isNotEmpty()) {
-                val svc = CorexAccessibilityService.instance ?: return@launch
-                val intent = svc.packageManager.getLaunchIntentForPackage(cached.packageName)
-                if (intent != null) {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    applicationContext.startActivity(intent)
-                    addLog("✓", "Abrí $name (caché)")
-                    DebugLog.log("launchApp", "Caché hit: ${cached.packageName}")
-                    return@launch
+                DebugLog.log("launchApp", "Cache hit: ${cached.key} -> ${cached.packageName}")
+                try {
+                    val intent = applicationContext.packageManager.getLaunchIntentForPackage(cached.packageName)
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        applicationContext.startActivity(intent)
+                        addLog("✓ Abrí", name)
+                        return@launch
+                    } else {
+                        DebugLog.log("launchApp", "Intent null, borrando cache corrupto")
+                        cache.forget("open_$name", cached.packageName)
+                    }
+                } catch (e: Exception) {
+                    DebugLog.logError("launchApp.cache", e)
+                    addLog("⛔", e.message ?: "")
                 }
             }
 
