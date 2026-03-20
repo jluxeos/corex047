@@ -328,7 +328,7 @@ class OverlayService : Service() {
         DebugLog.log("launchApp", "Buscando: $name")
 
         scope.launch {
-            val cached = cache.getAll().firstOrNull { it.key.equals("open_$name", ignoreCase = true) }
+            val cached = cache.getAll().firstOrNull { it.key.equals("open_$name", ignoreCase = true) || it.key.equals("open_${name.lowercase()}", ignoreCase = true) }
             if (cached != null && cached.packageName.isNotEmpty()) {
                 val svc = CorexAccessibilityService.instance ?: return@launch
                 val intent = svc.packageManager.getLaunchIntentForPackage(cached.packageName)
