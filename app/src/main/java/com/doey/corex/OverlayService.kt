@@ -41,6 +41,7 @@ class OverlayService : Service() {
         super.onCreate()
         cache = LearningCache(this)
         DebugLog.init(this)
+        CrashHandler.install(this)
         DebugLog.log("Service", "onCreate")
         try {
             createNotificationChannel()
@@ -248,7 +249,15 @@ class OverlayService : Service() {
             if (tab == 1) tvDebug?.text = DebugLog.getLast(50)
         }
         tabHistorial.setOnClickListener { selectTab(0) }
-        tabDebug.setOnClickListener { selectTab(1) }
+        tabDebug.setOnClickListener {
+            selectTab(1)
+            val crash = CrashHandler.readLastCrash(this@OverlayService)
+            tvDebug?.text = "=== CRASH ===
+$crash
+
+=== DEBUG ===
+${DebugLog.getLast(30)}"
+        }
         tabAjustes.setOnClickListener { selectTab(2) }
 
         seekDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
