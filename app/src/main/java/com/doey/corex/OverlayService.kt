@@ -298,10 +298,14 @@ class OverlayService : Service() {
     private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
         return try {
             val pm = applicationContext.packageManager
+            // Usar MATCH_ALL para obtener TODAS las apps instaladas
             val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val flags = android.content.pm.PackageManager.GET_META_DATA
-            val apps = pm.queryIntentActivities(intent, flags)
-            DebugLog.log("getApps", "Total encontradas: ${apps.size}")
+            val apps = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                pm.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_ALL)
+            } else {
+                pm.queryIntentActivities(intent, 0)
+            }
+            DebugLog.log("getApps", "Total: ${apps.size}")
             apps.map { info ->
                 Triple(
                     info.loadLabel(pm).toString(),
@@ -347,12 +351,12 @@ class OverlayService : Service() {
                     if (pkg != "NONE" && pkg.contains(".")) {
                         val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
                         showConfirmation("¿Es este $name?\n→ $appLabel", {
-                            scope.launch { launchPkg(pkg, name) }
+                            launchPkg(pkg, name) }
                             cache.learn("open_$name", pkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $appLabel")
                         }, {
                             showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
-                                scope.launch { launchPkg(chosenPkg, name) }
+                                launchPkg(chosenPkg, name) }
                                 val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                                 cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                                 addLog("✓ Aprendí", "$name = $label")
@@ -360,7 +364,7 @@ class OverlayService : Service() {
                         })
                     } else {
                         showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
-                            scope.launch { launchPkg(chosenPkg, name) }
+                            launchPkg(chosenPkg, name) }
                             val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $label")
@@ -379,18 +383,20 @@ class OverlayService : Service() {
     }
 
     private fun launchPkg(pkg: String, name: String) {
-        try {
-            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: run {
-                addLog("⚠", "No encontré $pkg")
-                return
+        scope.launch(Dispatchers.Main) {
+            try {
+                val intent = applicationContext.packageManager.getLaunchIntentForPackage(pkg) ?: run {
+                    addLog("⚠", "No encontré $pkg")
+                    return@launch
+                }
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                applicationContext.startActivity(intent)
+                addLog("✓ Abrí", name)
+                DebugLog.log("launchPkg", "OK: $pkg")
+            } catch (e: Exception) {
+                DebugLog.logError("launchPkg", e)
+                addLog("⛔", e.message ?: "error")
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            applicationContext.startActivity(intent)
-            addLog("✓ Abrí", name)
-            DebugLog.log("launchPkg", "OK: $pkg")
-        } catch (e: Exception) {
-            DebugLog.logError("launchPkg", e)
-            addLog("⛔ Error", e.message ?: "")
         }
     }
 
