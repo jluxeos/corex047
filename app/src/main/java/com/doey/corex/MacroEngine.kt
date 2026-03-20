@@ -66,10 +66,13 @@ class MacroEngine(private val context: Context) {
                         }
                         "TAP" -> {
                             onStep("👆 Tocando ${step.label}")
-                            CorexAccessibilityService.tapAt(
-                                CorexAccessibilityService.instance!!,
-                                step.x, step.y
-                            )
+                            val svc = CorexAccessibilityService.instance
+                            if (svc != null) {
+                                val path = android.graphics.Path().apply { moveTo(step.x, step.y) }
+                                val gesture = android.accessibilityservice.GestureDescription.Builder()
+                                    .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50)).build()
+                                svc.dispatchGesture(gesture, null, null)
+                            }
                             "OK"
                         }
                         "TYPE" -> {

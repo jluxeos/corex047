@@ -27,11 +27,6 @@ class OverlayService : Service() {
     private val recordingSteps = mutableListOf<MacroEngine.MacroStep>()
     private var recordingKey = ""
     private var isRecording = false
-    private lateinit var macroEngine: MacroEngine
-    private lateinit var numberOverlay: NumberOverlay
-    private val recordingSteps = mutableListOf<MacroEngine.MacroStep>()
-    private var recordingKey = ""
-    private var isRecording = false
     private val history = mutableListOf<String>()
     private lateinit var params: WindowManager.LayoutParams
     private var tvHistorial: TextView? = null
@@ -316,7 +311,7 @@ class OverlayService : Service() {
                         stopRecording()
                     }
                     text.lowercase().startsWith("abre ") || text.lowercase().startsWith("abrir ") -> {
-                        val appName = text.replace(Regex("(?i)^abri?r?\s+"), "").trim()
+                        val appName = text.replace(Regex("(?i)^abri?r?\\s+"), "").trim()
                         val cached = cache.getAll().firstOrNull { it.key.equals("open_$appName", ignoreCase = true) }
                         if (cached != null) {
                             recordingSteps.add(MacroEngine.MacroStep("OPEN_APP", cached.packageName, label = appName))
@@ -327,7 +322,7 @@ class OverlayService : Service() {
                         }
                     }
                     text.lowercase().startsWith("escribe ") || text.lowercase().startsWith("escrib ") -> {
-                        val msg = text.replace(Regex("(?i)^escrib[ei]r?\s+"), "").trim()
+                        val msg = text.replace(Regex("(?i)^escrib[ei]r?\\s+"), "").trim()
                         recordingSteps.add(MacroEngine.MacroStep("TYPE", msg, label = "escribir: $msg"))
                         addLog("🔴 +Paso", "Escribir: $msg")
                         mainHandler.postDelayed({ CorexAccessibilityService.typeText(msg) }, 400)
