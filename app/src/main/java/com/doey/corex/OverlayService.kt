@@ -23,6 +23,7 @@ class OverlayService : Service() {
     private var pendingAsk: ((String) -> Unit)? = null
     private val history = mutableListOf<String>()
     private lateinit var params: WindowManager.LayoutParams
+    private lateinit var tvHistorial: TextView
 
     companion object {
         const val CHANNEL_ID = "corex_overlay"
@@ -44,8 +45,6 @@ class OverlayService : Service() {
     private fun setupOverlay() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         overlayView = LayoutInflater.from(this).inflate(R.layout.overlay_bar, null)
-
-        // FLAG_NOT_TOUCH_MODAL permite tocar lo que está detrás del overlay
         params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -55,7 +54,6 @@ class OverlayService : Service() {
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.BOTTOM }
-
         windowManager!!.addView(overlayView, params)
         setupListeners()
     }
@@ -71,7 +69,6 @@ class OverlayService : Service() {
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         windowManager?.updateViewLayout(overlayView, params)
-        // Ocultar teclado
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         overlayView?.let { imm.hideSoftInputFromWindow(it.windowToken, 0) }
     }
@@ -86,7 +83,7 @@ class OverlayService : Service() {
         val panelAcciones = v.findViewById<View>(R.id.panelAcciones)
         val panelAjustes = v.findViewById<View>(R.id.panelAjustes)
         val scrollHistorial = v.findViewById<View>(R.id.scrollHistorial)
-        val tvHistorial = v.findViewById<TextView>(R.id.tvHistorial)
+        tvHistorial = v.findViewById(R.id.tvHistorial)
         val tabHistorial = v.findViewById<TextView>(R.id.tabHistorial)
         val tabAcciones = v.findViewById<TextView>(R.id.tabAcciones)
         val tabAjustes = v.findViewById<TextView>(R.id.tabAjustes)
@@ -95,13 +92,9 @@ class OverlayService : Service() {
         val btnGuardar = v.findViewById<Button>(R.id.btnGuardar)
         val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
-        // Al tocar el input, habilitar foco
         input.setOnClickListener { enableInput() }
         etApiKey.setOnClickListener { enableInput() }
-
-        input.setOnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) disableInput()
-        }
+        input.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) disableInput() }
 
         btnExpand.setOnClickListener {
             isExpanded = !isExpanded
@@ -131,15 +124,9 @@ class OverlayService : Service() {
         tabAcciones.setOnClickListener { selectTab(1) }
         tabAjustes.setOnClickListener { selectTab(2) }
 
-        v.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener {
-            CorexAccessibilityService.openAppByName("WhatsApp")
-        }
-        v.findViewById<Button>(R.id.btnMaps).setOnClickListener {
-            CorexAccessibilityService.openAppByName("Maps")
-        }
-        v.findViewById<Button>(R.id.btnYoutube).setOnClickListener {
-            CorexAccessibilityService.openAppByName("YouTube")
-        }
+        v.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener { launchByName("WhatsApp") }
+        v.findViewById<Button>(R.id.btnMaps).setOnClickListener { launchByName("Maps") }
+        v.findViewById<Button>(R.id.btnYoutube).setOnClickListener { launchByName("YouTube") }
 
         seekDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, p: Int, f: Boolean) { tvDelayVal.text = "${p}ms" }
@@ -152,8 +139,7 @@ class OverlayService : Service() {
                 .putString("api_key", etApiKey.text.toString().trim())
                 .putInt("delay", seekDelay.progress).apply()
             disableInput()
-            addToHistory("Sistema", "Ajustes guardados ✓")
-            mainHandler.post { updateHistory(tvHistorial) }
+            addLog("Sistema", "✓ Ajustes guardados")
         }
 
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
@@ -165,37 +151,54 @@ class OverlayService : Service() {
             val text = input.text.toString().trim()
             if (text.isEmpty()) return@setOnClickListener
             input.setText("")
+            // IMPORTANTE: deshabilitar input ANTES de tomar el dump
             disableInput()
 
             if (pendingAsk != null) {
                 val cb = pendingAsk!!
                 pendingAsk = null
-                addToHistory("Tú", text)
-                mainHandler.post { updateHistory(tvHistorial) }
+                addLog("Tú", text)
                 cb(text)
                 return@setOnClickListener
             }
-
-            addToHistory("Tú", text)
-            mainHandler.post { updateHistory(tvHistorial) }
-            processGoal(text, tvHistorial)
+            addLog("Tú", text)
+            // Esperar 400ms para que el teclado cierre y la pantalla sea visible
+            mainHandler.postDelayed({ processGoal(text) }, 400)
         }
 
         btnClose.setOnClickListener { stopSelf() }
     }
 
-    private fun processGoal(goal: String, tvHistorial: TextView) {
+    private fun launchByName(name: String) {
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
         val apiKey = prefs.getString("api_key", "") ?: ""
-        if (apiKey.isEmpty()) {
-            addToHistory("Corex", "⚠ Configura tu API key de Groq en Ajustes")
-            mainHandler.post { updateHistory(tvHistorial) }
-            return
+        if (apiKey.isEmpty()) { addLog("Corex", "⚠ Configura API key"); return }
+        addLog("Corex", "Abriendo $name...")
+        scope.launch {
+            val appList = CorexAccessibilityService.getInstalledApps()
+            GroqClient.chooseApp(name, appList, apiKey) { pkg ->
+                if (pkg != "NONE" && pkg.isNotEmpty()) {
+                    val service = CorexAccessibilityService.instance
+                    val intent = service?.packageManager?.getLaunchIntentForPackage(pkg)
+                    if (intent != null) {
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        applicationContext.startActivity(intent)
+                        mainHandler.post { addLog("Corex", "✓ Abrí $name") }
+                    } else {
+                        mainHandler.post { addLog("Corex", "⚠ $name no instalado") }
+                    }
+                } else {
+                    mainHandler.post { addLog("Corex", "⚠ No encontré $name") }
+                }
+            }
         }
+    }
 
+    private fun processGoal(goal: String) {
+        val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        if (apiKey.isEmpty()) { addLog("Corex", "⚠ Configura tu API key de Groq en Ajustes"); return }
         val delay = prefs.getInt("delay", 400).toLong()
-        addToHistory("Corex", "Analizando...")
-        mainHandler.post { updateHistory(tvHistorial) }
 
         scope.launch {
             var maxSteps = 15
@@ -206,44 +209,67 @@ class OverlayService : Service() {
                 maxSteps--
                 Thread.sleep(delay)
 
+                // Tomar dump DESPUÉS de que el teclado cierre
                 val dump = CorexAccessibilityService.getDumpForAI()
                 val learned = cache.getSummary()
                 val histStr = stepHistory.takeLast(4).joinToString(" → ")
 
-                var responded = false
-                var decision = GroqClient.Decision("FAIL", "timeout")
+                // Mostrar dump en historial para debug
+                mainHandler.post { addLog("📱 Pantalla", dump.take(200)) }
 
-                GroqClient.decide(goal, dump, histStr, learned, apiKey) { d ->
-                    decision = d
-                    responded = true
+                // Caso especial: si el goal es abrir una app, usar lista de paquetes
+                if (goal.lowercase().startsWith("abre") || goal.lowercase().startsWith("abrir") ||
+                    goal.lowercase().startsWith("open")) {
+                    val appName = goal.replace(Regex("(?i)abre?\\s*"), "").trim()
+                    val appList = CorexAccessibilityService.getInstalledApps()
+                    mainHandler.post { addLog("🔍 Buscando", appName) }
+                    var responded = false
+                    GroqClient.chooseApp(appName, appList, apiKey) { pkg ->
+                        responded = true
+                        if (pkg != "NONE" && pkg.isNotEmpty()) {
+                            val service = CorexAccessibilityService.instance
+                            val intent = service?.packageManager?.getLaunchIntentForPackage(pkg)
+                            if (intent != null) {
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                applicationContext.startActivity(intent)
+                                mainHandler.post { addLog("✓ IA eligió", pkg) }
+                            }
+                        } else {
+                            mainHandler.post { addLog("⚠", "No encontré $appName") }
+                        }
+                    }
+                    val t = System.currentTimeMillis() + 8000
+                    while (!responded && System.currentTimeMillis() < t) Thread.sleep(100)
+                    done = true
+                    continue
                 }
 
+                var responded = false
+                var decision = GroqClient.Decision("FAIL", "timeout")
+                GroqClient.decide(goal, dump, histStr, learned, apiKey) { d ->
+                    decision = d; responded = true
+                }
                 val timeout = System.currentTimeMillis() + 8000
                 while (!responded && System.currentTimeMillis() < timeout) Thread.sleep(100)
 
                 val action = decision.action
                 val value = decision.value
-
-                mainHandler.post {
-                    addToHistory("▶", "$action: $value")
-                    updateHistory(tvHistorial)
-                }
+                mainHandler.post { addLog("🤖 IA", "$action: $value") }
 
                 when {
                     action == "DONE" -> {
                         done = true
-                        mainHandler.post { addToHistory("Corex", "✅ Listo"); updateHistory(tvHistorial) }
+                        mainHandler.post { addLog("Corex", "✅ Listo") }
                     }
                     action == "ASK" -> {
                         done = true
                         val question = decision.askUser.ifEmpty { value }
                         mainHandler.post {
-                            addToHistory("Corex", "❓ $question\n(Responde con el número del elemento o instrucción)")
-                            updateHistory(tvHistorial)
+                            addLog("Corex", "❓ $question\n(Responde con número del elemento o instrucción)")
                             pendingAsk = { answer ->
+                                val idx = answer.toIntOrNull()
                                 val currentPkg = CorexAccessibilityService.instance
                                     ?.rootInActiveWindow?.packageName?.toString() ?: ""
-                                val idx = answer.toIntOrNull()
                                 if (idx != null) {
                                     val elements = CorexAccessibilityService.getScreenElements()
                                     if (idx < elements.size) {
@@ -253,62 +279,62 @@ class OverlayService : Service() {
                                             el.bounds.centerX().toFloat(),
                                             el.bounds.centerY().toFloat())
                                         CorexAccessibilityService.tapElement(idx)
-                                        addToHistory("Sistema", "✓ Aprendí: '$goal' → elemento $idx '${el.text.ifEmpty { el.contentDesc }}'")
-                                        mainHandler.post { updateHistory(tvHistorial) }
-                                        scope.launch {
-                                            Thread.sleep(delay)
-                                            processGoal(goal, tvHistorial)
-                                        }
+                                        addLog("Sistema", "✓ Aprendí: '$goal' → #$idx '${el.text.ifEmpty { el.contentDesc }}'")
+                                        scope.launch { Thread.sleep(delay); processGoal(goal) }
                                     }
                                 } else {
-                                    scope.launch { processGoal("$goal. Nota del usuario: $answer", tvHistorial) }
+                                    scope.launch { processGoal("$goal. Usuario dice: $answer") }
                                 }
                             }
                         }
                     }
                     action == "OPEN_APP" -> {
-                        val result = CorexAccessibilityService.openAppByName(value)
-                        stepHistory.add("OPEN_APP($value)=$result")
+                        val appList = CorexAccessibilityService.getInstalledApps()
+                        var r = false
+                        GroqClient.chooseApp(value, appList, apiKey) { pkg ->
+                            r = true
+                            if (pkg != "NONE") {
+                                val service = CorexAccessibilityService.instance
+                                val intent = service?.packageManager?.getLaunchIntentForPackage(pkg)
+                                intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                intent?.let { applicationContext.startActivity(it) }
+                                stepHistory.add("OPEN_APP($value)=OK")
+                                mainHandler.post { addLog("✓ Abrí", "$value ($pkg)") }
+                            } else {
+                                stepHistory.add("OPEN_APP($value)=FAIL")
+                            }
+                        }
+                        val t = System.currentTimeMillis() + 8000
+                        while (!r && System.currentTimeMillis() < t) Thread.sleep(100)
                         Thread.sleep(1500)
                     }
                     action == "TAP" -> {
                         val idx = value.toIntOrNull()
-                        if (idx != null) {
-                            CorexAccessibilityService.tapElement(idx)
-                            stepHistory.add("TAP($idx)")
-                        }
+                        if (idx != null) { CorexAccessibilityService.tapElement(idx); stepHistory.add("TAP($idx)") }
                         Thread.sleep(500)
                     }
-                    action == "TYPE" -> {
-                        CorexAccessibilityService.typeText(value)
-                        stepHistory.add("TYPE")
-                        Thread.sleep(300)
-                    }
+                    action == "TYPE" -> { CorexAccessibilityService.typeText(value); stepHistory.add("TYPE"); Thread.sleep(300) }
                     action == "SCROLL_DOWN" -> { CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
                     action == "SCROLL_UP" -> { CorexAccessibilityService.scrollUp(); stepHistory.add("SCROLL_UP"); Thread.sleep(700) }
                     action == "BACK" -> { CorexAccessibilityService.pressBack(); stepHistory.add("BACK"); Thread.sleep(500) }
                     action == "HOME" -> { CorexAccessibilityService.pressHome(); stepHistory.add("HOME"); Thread.sleep(500) }
-                    else -> {
-                        done = true
-                        mainHandler.post { addToHistory("Corex", "⛔ No pude completar"); updateHistory(tvHistorial) }
-                    }
+                    else -> { done = true; mainHandler.post { addLog("Corex", "⛔ No pude completar") } }
                 }
 
                 if (stepHistory.size >= 3 && stepHistory.takeLast(3).all { it == stepHistory.last() }) {
                     done = true
-                    mainHandler.post { addToHistory("Corex", "⚠ Sin progreso — sé más específico"); updateHistory(tvHistorial) }
+                    mainHandler.post { addLog("Corex", "⚠ Sin progreso — sé más específico") }
                 }
             }
         }
     }
 
-    private fun addToHistory(who: String, msg: String) {
+    private fun addLog(who: String, msg: String) {
         history.add("$who: $msg")
-        if (history.size > 50) history.removeAt(0)
-    }
-
-    private fun updateHistory(tv: TextView) {
-        tv.text = history.takeLast(20).joinToString("\n")
+        if (history.size > 60) history.removeAt(0)
+        if (::tvHistorial.isInitialized) {
+            mainHandler.post { tvHistorial.text = history.takeLast(25).joinToString("\n") }
+        }
     }
 
     private fun createNotificationChannel() {
@@ -317,18 +343,14 @@ class OverlayService : Service() {
     }
 
     private fun buildNotification(text: String): Notification {
-        val stopIntent = PendingIntent.getService(
-            this, 0,
+        val stopIntent = PendingIntent.getService(this, 0,
             Intent(this, OverlayService::class.java).apply { action = "STOP" },
-            PendingIntent.FLAG_IMMUTABLE
-        )
+            PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Corex")
-            .setContentText(text)
+            .setContentTitle("Corex").setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .addAction(android.R.drawable.ic_delete, "Cerrar", stopIntent)
-            .setOngoing(true)
-            .build()
+            .setOngoing(true).build()
     }
 
     private fun updateNotification(text: String) {
