@@ -375,7 +375,7 @@ class OverlayService : Service() {
                 return@setOnClickListener
             }
 
-            mainHandler.postDelayed({ processGoal(text) }, 400)
+            mainHandler.postDelayed({ processGoal(text) }, 800)
         }
 
         btnClose.setOnClickListener { stopSelf() }
@@ -521,10 +521,10 @@ class OverlayService : Service() {
                 return@launch
             }
 
-            val openRegex = Regex("(?i)^(abre?r?|open|lanzar?|inicia?)\\s+(.+)$")
+            val openRegex = Regex("(?i)^(abre?r?|open|lanzar?|inicia?)\\s+([\\w\\s]+)$")
             val openMatch = openRegex.find(goal.trim())
-            if (openMatch != null) {
-                launchApp(openMatch.groupValues[2].trim())
+            val hasAction = goal.contains(Regex("(?i)\\b(y |para |dile|manda|busca|pon |llama|envia)\\b"))
+            if (openMatch != null && !hasAction) {
                 return@launch
             }
 
