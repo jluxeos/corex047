@@ -31,6 +31,9 @@ class OverlayService : Service() {
     private lateinit var params: WindowManager.LayoutParams
     private var tvHistorial: TextView? = null
     private var tvDebug: TextView? = null
+    private var tvChat: TextView? = null
+    private var scrollChat: android.widget.ScrollView? = null
+    private val chatMessages = mutableListOf<String>()
     private var panelPicker: View? = null
     private var pickerGrid: GridLayout? = null
     private var pickerButtons: LinearLayout? = null
@@ -52,6 +55,7 @@ class OverlayService : Service() {
         DebugLog.init(this)
         CrashHandler.install(this)
         DebugLog.log("Service", "onCreate")
+        mainHandler.postDelayed({ addChat("Hola! Soy Corex. Cuéntame qué necesitas y lo resuelvo") }, 1000)
         try {
             createNotificationChannel()
             startForeground(NOTIF_ID, buildNotification("Corex activo"))
@@ -215,12 +219,15 @@ class OverlayService : Service() {
         val scrollDebug = v.findViewById<View>(R.id.scrollDebug)
         val panelAjustes = v.findViewById<View>(R.id.panelAjustes)
         tvHistorial = v.findViewById(R.id.tvHistorial)
+        tvChat = v.findViewById(R.id.tvChat)
+        scrollChat = v.findViewById(R.id.scrollChat)
         tvDebug = v.findViewById(R.id.tvDebug)
         panelPicker = v.findViewById(R.id.panelPicker)
         pickerGrid = v.findViewById(R.id.pickerGrid)
         pickerButtons = v.findViewById(R.id.pickerButtons)
         pickerScroll = v.findViewById(R.id.pickerScroll)
         tvPickerTitle = v.findViewById(R.id.tvPickerTitle)
+        val tabChat = v.findViewById<TextView>(R.id.tabChat)
         val tabHistorial = v.findViewById<TextView>(R.id.tabHistorial)
         val tabDebug = v.findViewById<TextView>(R.id.tabDebug)
         val tabAjustes = v.findViewById<TextView>(R.id.tabAjustes)
@@ -398,6 +405,7 @@ class OverlayService : Service() {
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
         val apiKey = prefs.getString("api_key", "") ?: ""
         DebugLog.log("launchApp", "Buscando: $name")
+        addChat("Voy a abrir $name, dame un seg...")
 
         scope.launch {
             val cached = cache.getAll().firstOrNull { it.key.equals("open_$name", ignoreCase = true) || it.key.equals("open_${name.lowercase()}", ignoreCase = true) }
@@ -494,9 +502,11 @@ class OverlayService : Service() {
 
         scope.launch {
             // Verificar macro guardada
+            addChat("Ok, voy a ver qué puedo hacer con: \"$goal\"")
             val existingMacro = macroEngine.find(goal)
             if (existingMacro != null) {
-                addLog("⚡ Macro", "Ejecutando offline: ${existingMacro.key}")
+                addChat("Tengo esto memorizado, lo hago sin internet")
+            addLog("⚡ Macro", "Ejecutando offline: ${existingMacro.key}")
                 macroEngine.execute(existingMacro, delay,
                     onStep = { msg -> addLog("▶", msg) },
                     onDone = { ok -> if (ok) addLog("✅", "Listo") else addLog("⛔", "Macro falló") }
@@ -525,6 +535,7 @@ class OverlayService : Service() {
 
                 DebugLog.log("Dump", dump.take(500))
                 addLog("📱", "${elements.size} elementos")
+                if (elements.isEmpty()) addChat("Hmm, no veo nada en pantalla, dame un momento...")
 
                 var responded = false
                 var decision = GroqClient.Decision("ASK", "timeout")
@@ -538,7 +549,7 @@ class OverlayService : Service() {
                 addLog("🤖", "${decision.action}: ${decision.value}")
 
                 when (decision.action) {
-                    "DONE" -> { done = true; addLog("Corex", "✅ Listo") }
+                    "DONE" -> { done = true; addLog("Corex", "✅ Listo"); addChat("Listo, ya terminé lo que me pediste") }
                     "ASK" -> {
                         done = true
                         val question = decision.askUser.ifEmpty { "¿Cuál toco para: $goal?" }
@@ -554,6 +565,7 @@ class OverlayService : Service() {
                         }
                     }
                     "OPEN_APP" -> {
+                        addChat("Voy a abrir ${decision.value} para continuar")
                         launchApp(decision.value)
                         stepHistory.add("OPEN(${decision.value})")
                         Thread.sleep(1500)
@@ -602,8 +614,8 @@ class OverlayService : Service() {
                         }
                         Thread.sleep(500)
                     }
-                    "TYPE" -> { CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
-                    "SCROLL_DOWN" -> { CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
+                    "TYPE" -> { addChat("Escribo: \"${decision.value}\""); CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
+                    "SCROLL_DOWN" -> { addChat("Bajo un poco para ver más..."); CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
                     "SCROLL_UP" -> { CorexAccessibilityService.scrollUp(); stepHistory.add("SCROLL_UP"); Thread.sleep(700) }
                     "BACK" -> { CorexAccessibilityService.pressBack(); stepHistory.add("BACK"); Thread.sleep(500) }
                     "HOME" -> { CorexAccessibilityService.pressHome(); stepHistory.add("HOME"); Thread.sleep(500) }
@@ -651,6 +663,17 @@ class OverlayService : Service() {
             onChoice(chosen)
         }
         addLog("🔢", "${elements.size} elementos numerados en pantalla")
+    }
+
+    private fun addChat(msg: String) {
+        chatMessages.add(msg)
+        if (chatMessages.size > 100) chatMessages.removeAt(0)
+        mainHandler.post {
+            tvChat?.text = chatMessages.joinToString("
+
+")
+            scrollChat?.post { scrollChat?.fullScroll(android.view.View.FOCUS_DOWN) }
+        }
     }
 
     private fun addLog(who: String, msg: String) {
