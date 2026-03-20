@@ -409,7 +409,7 @@ class OverlayService : Service() {
                                             scope.launch { Thread.sleep(delay); processGoal(goal) }
                                         }
                                     }
-                                }
+                                })
                             }
                         } else {
                             done = true
