@@ -94,7 +94,7 @@ class OverlayService : Service() {
                 }
             }
             pickerButtons?.addView(noneBtn)
-            options.forEach { (label, pkg) ->
+            options.forEach { (label, pkg): Pair<String, String> ->
                 val btn = Button(this).apply {
                     text = label
                     setBackgroundResource(R.drawable.btn_send_bg)
