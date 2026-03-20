@@ -246,7 +246,7 @@ class OverlayService : Service() {
             tabHistorial.setTextColor(if (tab == 0) p else g)
             tabDebug.setTextColor(if (tab == 1) p else g)
             tabAjustes.setTextColor(if (tab == 2) p else g)
-            if (tab == 1) tvDebug?.text = DebugLog.getLastEntries(50)
+            tvDebug?.text = "CRASH:\n" + crash + "\nDEBUG:\n" + DebugLog.getLastEntries(30)
         }
         tabHistorial.setOnClickListener { selectTab(0) }
         tabDebug.setOnClickListener {
