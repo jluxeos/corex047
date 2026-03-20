@@ -329,7 +329,7 @@ class OverlayService : Service() {
                 addLog("🔍 IA buscando", appName)
 
                 var responded = false
-                GroqClient.chooseApp(appName, appListStr, apiKey) { pkg ->
+                GroqClient.chooseApp(appName, appListStr, apiKey) { pkg: String ->
                     responded = true
                     if (pkg != "NONE" && pkg.isNotEmpty() && pkg.contains(".")) {
                         val intent = service.packageManager.getLaunchIntentForPackage(pkg)
@@ -413,7 +413,7 @@ class OverlayService : Service() {
                         }
                         val appListStr = appList.joinToString("\n") { "${it.first}|${it.second}" }
                         var r = false
-                        GroqClient.chooseApp(decision.value, appListStr, apiKey) { pkg ->
+                        GroqClient.chooseApp(decision.value, appListStr, apiKey) { pkg: String ->
                             r = true
                             val intent = service.packageManager.getLaunchIntentForPackage(pkg)
                             intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
