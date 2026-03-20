@@ -22,6 +22,16 @@ class OverlayService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var cache: LearningCache
+    private lateinit var macroEngine: MacroEngine
+    private lateinit var numberOverlay: NumberOverlay
+    private val recordingSteps = mutableListOf<MacroEngine.MacroStep>()
+    private var recordingKey = ""
+    private var isRecording = false
+    private lateinit var macroEngine: MacroEngine
+    private lateinit var numberOverlay: NumberOverlay
+    private val recordingSteps = mutableListOf<MacroEngine.MacroStep>()
+    private var recordingKey = ""
+    private var isRecording = false
     private val history = mutableListOf<String>()
     private lateinit var params: WindowManager.LayoutParams
     private var tvHistorial: TextView? = null
@@ -40,6 +50,10 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         cache = LearningCache(this)
+        macroEngine = MacroEngine(this)
+        numberOverlay = NumberOverlay(this)
+        macroEngine = MacroEngine(this)
+        numberOverlay = NumberOverlay(this)
         DebugLog.init(this)
         CrashHandler.install(this)
         DebugLog.log("Service", "onCreate")
@@ -294,6 +308,64 @@ class OverlayService : Service() {
             disableInput()
             addLog("Tú", text)
             DebugLog.log("Input", text)
+
+            if (isRecording) {
+                // Modo grabacion
+                when {
+                    text.equals("listo", ignoreCase = true) || text.equals("fin", ignoreCase = true) -> {
+                        stopRecording()
+                    }
+                    text.lowercase().startsWith("abre ") || text.lowercase().startsWith("abrir ") -> {
+                        val appName = text.replace(Regex("(?i)^abri?r?\s+"), "").trim()
+                        val cached = cache.getAll().firstOrNull { it.key.equals("open_$appName", ignoreCase = true) }
+                        if (cached != null) {
+                            recordingSteps.add(MacroEngine.MacroStep("OPEN_APP", cached.packageName, label = appName))
+                            addLog("🔴 +Paso", "Abrir $appName")
+                            mainHandler.postDelayed({ launchApp(appName) }, 400)
+                        } else {
+                            addLog("⚠", "Primero enséñame a abrir $appName sin grabar")
+                        }
+                    }
+                    text.lowercase().startsWith("escribe ") || text.lowercase().startsWith("escrib ") -> {
+                        val msg = text.replace(Regex("(?i)^escrib[ei]r?\s+"), "").trim()
+                        recordingSteps.add(MacroEngine.MacroStep("TYPE", msg, label = "escribir: $msg"))
+                        addLog("🔴 +Paso", "Escribir: $msg")
+                        mainHandler.postDelayed({ CorexAccessibilityService.typeText(msg) }, 400)
+                    }
+                    text.equals("toca", ignoreCase = true) || text.equals("tocar", ignoreCase = true) -> {
+                        // Mostrar overlay de numeros para elegir elemento
+                        mainHandler.postDelayed({
+                            showNumberOverlay { el ->
+                                recordingSteps.add(MacroEngine.MacroStep("TAP", el.text.ifEmpty { el.contentDesc },
+                                    el.bounds.centerX().toFloat(), el.bounds.centerY().toFloat(),
+                                    el.text.ifEmpty { el.contentDesc }))
+                                addLog("🔴 +Paso", "Tocar: ${el.text.ifEmpty { el.contentDesc }}")
+                                CorexAccessibilityService.tapElement(el.index)
+                            }
+                        }, 400)
+                    }
+                    text.equals("atras", ignoreCase = true) || text.equals("atrás", ignoreCase = true) -> {
+                        recordingSteps.add(MacroEngine.MacroStep("BACK", "", label = "atrás"))
+                        addLog("🔴 +Paso", "Atrás")
+                        CorexAccessibilityService.pressBack()
+                    }
+                    text.equals("inicio", ignoreCase = true) || text.equals("home", ignoreCase = true) -> {
+                        recordingSteps.add(MacroEngine.MacroStep("HOME", "", label = "inicio"))
+                        addLog("🔴 +Paso", "Inicio")
+                        CorexAccessibilityService.pressHome()
+                    }
+                    text.equals("scroll", ignoreCase = true) || text.equals("bajar", ignoreCase = true) -> {
+                        recordingSteps.add(MacroEngine.MacroStep("SCROLL_DOWN", "", label = "scroll abajo"))
+                        addLog("🔴 +Paso", "Scroll abajo")
+                        CorexAccessibilityService.scrollDown()
+                    }
+                    else -> {
+                        addLog("💡", "Comandos: 'abre X', 'escribe X', 'toca', 'atras', 'scroll', 'listo'")
+                    }
+                }
+                return@setOnClickListener
+            }
+
             mainHandler.postDelayed({ processGoal(text) }, 400)
         }
 
@@ -426,6 +498,17 @@ class OverlayService : Service() {
         DebugLog.log("processGoal", goal)
 
         scope.launch {
+            // Verificar macro guardada
+            val existingMacro = macroEngine.find(goal)
+            if (existingMacro != null) {
+                addLog("⚡ Macro", "Ejecutando offline: ${existingMacro.key}")
+                macroEngine.execute(existingMacro, delay,
+                    onStep = { msg -> addLog("▶", msg) },
+                    onDone = { ok -> if (ok) addLog("✅", "Listo") else addLog("⛔", "Macro falló") }
+                )
+                return@launch
+            }
+
             val openRegex = Regex("(?i)^(abre?r?|open|lanzar?|inicia?)\\s+(.+)$")
             val openMatch = openRegex.find(goal.trim())
             if (openMatch != null) {
@@ -540,6 +623,39 @@ class OverlayService : Service() {
         }
     }
 
+    private fun startRecording(macroName: String) {
+        recordingKey = macroName
+        recordingSteps.clear()
+        isRecording = true
+        addLog("🔴 Grabando", "Macro: '$macroName'")
+        addLog("💡", "Ahora dame las instrucciones paso a paso. Di 'listo' para terminar.")
+    }
+
+    private fun stopRecording() {
+        isRecording = false
+        if (recordingSteps.isEmpty()) {
+            addLog("⚠", "No grabé ningún paso")
+            return
+        }
+        val macro = MacroEngine.Macro(recordingKey, recordingSteps.toList())
+        macroEngine.save(macro)
+        addLog("✅ Guardado", "Macro '${recordingKey}' con ${recordingSteps.size} pasos")
+        recordingKey = ""
+        recordingSteps.clear()
+    }
+
+    private fun showNumberOverlay(onChoice: (ScreenElement) -> Unit) {
+        val elements = CorexAccessibilityService.getScreenElements()
+        if (elements.isEmpty()) {
+            addLog("⚠", "No veo elementos en pantalla")
+            return
+        }
+        numberOverlay.show(elements) { chosen ->
+            onChoice(chosen)
+        }
+        addLog("🔢", "${elements.size} elementos numerados en pantalla")
+    }
+
     private fun addLog(who: String, msg: String) {
         history.add("$who: $msg")
         if (history.size > 60) history.removeAt(0)
@@ -576,6 +692,8 @@ class OverlayService : Service() {
         super.onDestroy()
         DebugLog.log("Service", "onDestroy")
         scope.cancel()
+        numberOverlay.hide()
+        numberOverlay.hide()
         try { overlayView?.let { windowManager?.removeView(it) } } catch (e: Exception) {}
     }
 }
