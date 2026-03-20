@@ -94,10 +94,40 @@ class CorexAccessibilityService : AccessibilityService() {
 
         fun getInstalledApps(): List<Pair<String, String>> {
             val service = instance ?: return emptyList()
-            return service.packageManager.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
-            ).map { info ->
-                info.loadLabel(service.packageManager).toString() to info.activityInfo.packageName
+            val pm = service.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val apps = pm.queryIntentActivities(intent, 0)
+            return apps.map { info ->
+                info.loadLabel(pm).toString() to info.activityInfo.packageName
+            }.sortedBy { it.first }
+        }
+
+        fun getInstalledAppsWithIcons(): List<Triple<String, String, android.graphics.drawable.Drawable?>> {
+            val service = instance ?: return emptyList()
+            val pm = service.packageManager
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val apps = pm.queryIntentActivities(intent, 0)
+            android.util.Log.d("CorexApps", "Apps desde AccessibilityService: ${apps.size}")
+            return apps.map { info ->
+                Triple(
+                    info.loadLabel(pm).toString(),
+                    info.activityInfo.packageName,
+                    try { info.loadIcon(pm) } catch (e: Exception) { null }
+                )
+            }.sortedBy { it.first }
+        }
+
+        fun launchPackage(pkg: String, context: android.content.Context): Boolean {
+            return try {
+                val service = instance
+                val pm = service?.packageManager ?: context.packageManager
+                val intent = pm.getLaunchIntentForPackage(pkg) ?: return false
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                true
+            } catch (e: Exception) {
+                android.util.Log.e("CorexApps", "launchPackage error: ${e.message}")
+                false
             }
         }
 

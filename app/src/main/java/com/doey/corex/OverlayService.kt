@@ -296,19 +296,26 @@ class OverlayService : Service() {
     }
 
     private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
+        // Usar AccessibilityService que tiene acceso completo al sistema
+        val fromService = CorexAccessibilityService.getInstalledAppsWithIcons()
+        if (fromService.isNotEmpty()) {
+            DebugLog.log("getApps", "AccessibilityService: ${fromService.size} apps")
+            return fromService
+        }
+        // Fallback: packageManager directo
         return try {
             val pm = applicationContext.packageManager
-            // Obtener todos los paquetes instalados y filtrar los que tienen launcher
-            val packages = pm.getInstalledPackages(android.content.pm.PackageManager.GET_ACTIVITIES)
-            val result = mutableListOf<Triple<String, String, Drawable?>>()
-            for (pkg in packages) {
-                val launchIntent = pm.getLaunchIntentForPackage(pkg.packageName) ?: continue
-                val label = pm.getApplicationLabel(pkg.applicationInfo).toString()
-                val icon = try { pm.getApplicationIcon(pkg.packageName) } catch (e: Exception) { null }
-                result.add(Triple(label, pkg.packageName, icon))
-            }
-            DebugLog.log("getApps", "Total: ${result.size}")
-            result.sortedBy { it.first }
+            val apps = pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            )
+            DebugLog.log("getApps", "Fallback: ${apps.size} apps")
+            apps.map { info ->
+                Triple(
+                    info.loadLabel(pm).toString(),
+                    info.activityInfo.packageName,
+                    try { info.loadIcon(pm) } catch (e: Exception) { null }
+                )
+            }.sortedBy { it.first }
         } catch (e: Exception) {
             DebugLog.logError("getAppsWithIcons", e)
             emptyList()
@@ -379,19 +386,22 @@ class OverlayService : Service() {
     }
 
     private fun launchPkg(pkg: String, name: String) {
-        scope.launch(Dispatchers.Main) {
-            try {
-                val intent = applicationContext.packageManager.getLaunchIntentForPackage(pkg) ?: run {
-                    addLog("⚠", "No encontré $pkg")
-                    return@launch
-                }
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                applicationContext.startActivity(intent)
+        scope.launch(Dispatchers.IO) {
+            val ok = CorexAccessibilityService.launchPackage(pkg, applicationContext)
+            if (ok) {
                 addLog("✓ Abrí", name)
                 DebugLog.log("launchPkg", "OK: $pkg")
-            } catch (e: Exception) {
-                DebugLog.logError("launchPkg", e)
-                addLog("⛔", e.message ?: "error")
+            } else {
+                // Fallback directo
+                try {
+                    val intent = applicationContext.packageManager.getLaunchIntentForPackage(pkg)
+                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    intent?.let { applicationContext.startActivity(it) }
+                    addLog("✓ Abrí", "$name (fallback)")
+                } catch (e: Exception) {
+                    DebugLog.logError("launchPkg", e)
+                    addLog("⛔", "No pude abrir $name")
+                }
             }
         }
     }
