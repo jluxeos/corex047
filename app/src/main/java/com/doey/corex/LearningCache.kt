@@ -80,7 +80,7 @@ class LearningCache(private val context: Context) {
         list.forEach { a ->
             arr.put(JSONObject().apply {
                 put("key", a.key); put("pkg", a.packageName); put("idx", a.elementIndex)
-                put("txt", a.elementText); put("x", a.x); put("y", a.y); put("uses", a.uses)
+                put("txt", a.elementText); put("x", a.x.toDouble()); put("y", a.y.toDouble()); put("uses", a.uses)
             })
         }
         file.writeText(arr.toString())
