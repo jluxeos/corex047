@@ -1,11 +1,14 @@
 package com.doey.corex
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-class LearningCache(context: Context) {
+class LearningCache(private val context: Context) {
 
     private val file = File(context.filesDir, "learning.json")
 
@@ -23,28 +26,18 @@ class LearningCache(context: Context) {
         val all = loadAll().toMutableList()
         val existing = all.indexOfFirst { it.key == key && it.packageName == pkg }
         if (existing >= 0) {
-            all[existing] = all[existing].copy(
-                elementIndex = index, elementText = text, x = x, y = y,
-                uses = all[existing].uses + 1
-            )
+            all[existing] = all[existing].copy(elementIndex = index, elementText = text, x = x, y = y, uses = all[existing].uses + 1)
         } else {
             all.add(LearnedAction(key, pkg, index, text, x, y))
         }
         persist(all)
     }
 
-    fun find(key: String, pkg: String): LearnedAction? {
-        return loadAll().firstOrNull {
-            it.key.equals(key, ignoreCase = true) && it.packageName == pkg
-        }
-    }
+    fun find(key: String, pkg: String): LearnedAction? =
+        loadAll().firstOrNull { it.key.equals(key, ignoreCase = true) && it.packageName == pkg }
 
     fun getAll(): List<LearnedAction> = loadAll()
-
-    fun forget(key: String, pkg: String) {
-        persist(loadAll().filter { !(it.key == key && it.packageName == pkg) })
-    }
-
+    fun forget(key: String, pkg: String) = persist(loadAll().filter { !(it.key == key && it.packageName == pkg) })
     fun clear() { if (file.exists()) file.delete() }
 
     fun getSummary(): String {
@@ -53,21 +46,31 @@ class LearningCache(context: Context) {
         return all.joinToString("; ") { "${it.key}@${it.packageName.substringAfterLast('.')}=${it.elementText}" }
     }
 
+    fun exportToFile(): File {
+        val export = File(context.getExternalFilesDir(null), "corex_cache_export.json")
+        export.writeText(file.readText())
+        return export
+    }
+
+    fun importFromUri(uri: Uri): Boolean {
+        return try {
+            val input = context.contentResolver.openInputStream(uri) ?: return false
+            val text = input.bufferedReader().readText()
+            input.close()
+            JSONArray(text) // Validar que es JSON válido
+            file.writeText(text)
+            true
+        } catch (e: Exception) { false }
+    }
+
     private fun loadAll(): List<LearnedAction> {
         if (!file.exists()) return emptyList()
         return try {
             val arr = JSONArray(file.readText())
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                LearnedAction(
-                    key = o.getString("key"),
-                    packageName = o.getString("pkg"),
-                    elementIndex = o.getInt("idx"),
-                    elementText = o.getString("txt"),
-                    x = o.getDouble("x").toFloat(),
-                    y = o.getDouble("y").toFloat(),
-                    uses = o.optInt("uses", 1)
-                )
+                LearnedAction(o.getString("key"), o.getString("pkg"), o.getInt("idx"),
+                    o.getString("txt"), o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.optInt("uses", 1))
             }
         } catch (e: Exception) { emptyList() }
     }
@@ -76,13 +79,8 @@ class LearningCache(context: Context) {
         val arr = JSONArray()
         list.forEach { a ->
             arr.put(JSONObject().apply {
-                put("key", a.key)
-                put("pkg", a.packageName)
-                put("idx", a.elementIndex)
-                put("txt", a.elementText)
-                put("x", a.x)
-                put("y", a.y)
-                put("uses", a.uses)
+                put("key", a.key); put("pkg", a.packageName); put("idx", a.elementIndex)
+                put("txt", a.elementText); put("x", a.x); put("y", a.y); put("uses", a.uses)
             })
         }
         file.writeText(arr.toString())
