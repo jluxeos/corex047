@@ -21,7 +21,7 @@ object DebugLog {
         try { logFile?.appendText(entry + "\n") } catch (e: Exception) {}
     }
 
-    fun getLast(n: Int = 50): String = entries.takeLast(n).joinToString("\n")
+    fun getLastEntries(n: Int = 50): String = entries.takeLast(n).joinToString("\n")
 
     fun logError(tag: String, e: Exception) {
         log("ERR/$tag", "${e.javaClass.simpleName}: ${e.message}")
