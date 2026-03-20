@@ -83,23 +83,23 @@ class OverlayService : Service() {
     // Grid de apps con iconos
     private fun showAppGrid(title: String, apps: List<Triple<String, String, Drawable?>>, onChoice: (String) -> Unit) {
         mainHandler.post {
-            tvPickerTitle?.text = title
+            tvPickerTitle?.text = "$title (${apps.size} apps)"
             pickerGrid?.removeAllViews()
             pickerScroll?.visibility = View.GONE
             pickerGrid?.visibility = View.VISIBLE
 
-            // Botón cancelar
-            val cancelBtn = Button(this).apply {
-                text = "✕"
+            // Cancelar
+            pickerGrid?.addView(Button(this).apply {
+                text = "✕ Cancelar"
                 setBackgroundResource(R.drawable.btn_tonal_bg)
                 setPadding(16, 8, 16, 8)
                 setOnClickListener { hidePicker() }
-            }
-            val cancelSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-            pickerGrid?.addView(cancelBtn, GridLayout.LayoutParams(cancelSpec, cancelSpec).apply {
-                width = 0; setMargins(4, 4, 4, 4)
-            })
+            }, GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            ).apply { width = 0; setMargins(4, 4, 4, 4) })
 
+            // Todas las apps
             for (app in apps) {
                 val label = app.first
                 val pkg = app.second
@@ -107,26 +107,25 @@ class OverlayService : Service() {
                 val cell = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = android.view.Gravity.CENTER
-                    setPadding(8, 8, 8, 8)
+                    setPadding(4, 8, 4, 8)
                     setOnClickListener { hidePicker(); onChoice(pkg) }
                 }
-                val img = ImageView(this).apply {
+                cell.addView(ImageView(this).apply {
                     if (icon != null) setImageDrawable(icon)
                     else setImageResource(android.R.drawable.sym_def_app_icon)
-                    layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
-                }
-                val txt = TextView(this).apply {
-                    text = label.take(10)
+                    layoutParams = LinearLayout.LayoutParams(56.dpToPx(), 56.dpToPx())
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                })
+                cell.addView(TextView(this).apply {
+                    text = label.take(12)
                     textSize = 9f
                     gravity = android.view.Gravity.CENTER
                     maxLines = 2
-                }
-                cell.addView(img)
-                cell.addView(txt)
-                val spec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                pickerGrid?.addView(cell, GridLayout.LayoutParams(spec, spec).apply {
-                    width = 0; setMargins(2, 2, 2, 2)
                 })
+                pickerGrid?.addView(cell, GridLayout.LayoutParams(
+                    GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                    GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                ).apply { width = 0; setMargins(2, 2, 2, 2) })
             }
             panelPicker?.visibility = View.VISIBLE
         }
@@ -349,7 +348,7 @@ class OverlayService : Service() {
                             cache.learn("open_$name", pkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $appLabel")
                         }, {
-                            showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
+                            showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
                                 scope.launch { launchPkg(chosenPkg, name) }
                                 val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                                 cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
@@ -357,7 +356,7 @@ class OverlayService : Service() {
                             }
                         })
                     } else {
-                        showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
+                        showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
                             scope.launch { launchPkg(chosenPkg, name) }
                             val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
@@ -366,7 +365,7 @@ class OverlayService : Service() {
                     }
                 }
             } else {
-                showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
+                showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
                     launchPkg(chosenPkg, name)
                     val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                     cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)

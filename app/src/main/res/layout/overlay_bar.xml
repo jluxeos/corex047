@@ -201,12 +201,15 @@
             android:textStyle="bold"
             android:layout_marginBottom="8dp"/>
 
-        <!-- Grid de apps con iconos -->
-        <androidx.gridlayout.widget.GridLayout
-            android:id="@+id/pickerGrid"
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:columnCount="4"/>
+            android:layout_height="200dp">
+            <androidx.gridlayout.widget.GridLayout
+                android:id="@+id/pickerGrid"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:columnCount="4"/>
+        </ScrollView>
 
         <!-- Botones de elementos de pantalla (scroll horizontal) -->
         <HorizontalScrollView
