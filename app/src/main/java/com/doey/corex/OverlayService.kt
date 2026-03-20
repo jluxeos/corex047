@@ -246,18 +246,9 @@ class OverlayService : Service() {
             tabHistorial.setTextColor(if (tab == 0) p else g)
             tabDebug.setTextColor(if (tab == 1) p else g)
             tabAjustes.setTextColor(if (tab == 2) p else g)
-            tvDebug?.text = "CRASH:\n" + crash + "\nDEBUG:\n" + DebugLog.getLastEntries(30)
         }
         tabHistorial.setOnClickListener { selectTab(0) }
-        tabDebug.setOnClickListener {
-            selectTab(1)
-            val crashLog = CrashHandler.readLastCrash(this@OverlayService)
-            val debugLog = DebugLog.getLastEntries(30)
-            tvDebug?.text = "CRASH:
-$crashLog
-DEBUG:
-$debugLog"
-        }
+        tabDebug.setOnClickListener { selectTab(1); val cl = CrashHandler.readLastCrash(this@OverlayService); tvDebug?.text = "CRASH:" + cl + "DEBUG:" + DebugLog.getLastEntries(30) }
         tabAjustes.setOnClickListener { selectTab(2) }
 
         seekDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
