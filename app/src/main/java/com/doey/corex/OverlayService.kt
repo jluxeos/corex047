@@ -351,12 +351,12 @@ class OverlayService : Service() {
                     if (pkg != "NONE" && pkg.contains(".")) {
                         val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
                         showConfirmation("¿Es este $name?\n→ $appLabel", {
-                            launchPkg(pkg, name) }
+                            launchPkg(pkg, name) 
                             cache.learn("open_$name", pkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $appLabel")
                         }, {
                             showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
-                                launchPkg(chosenPkg, name) }
+                                launchPkg(chosenPkg, name) 
                                 val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                                 cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                                 addLog("✓ Aprendí", "$name = $label")
@@ -364,7 +364,7 @@ class OverlayService : Service() {
                         })
                     } else {
                         showAppGrid("¿Cuál es $name? (todas)", apps) { chosenPkg: String ->
-                            launchPkg(chosenPkg, name) }
+                            launchPkg(chosenPkg, name) 
                             val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                             addLog("✓ Aprendí", "$name = $label")
