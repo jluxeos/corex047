@@ -14,15 +14,6 @@ class CorexAccessibilityService : AccessibilityService() {
     companion object {
         var instance: CorexAccessibilityService? = null
 
-        data class ScreenElement(
-            val index: Int,
-            val text: String,
-            val contentDesc: String,
-            val bounds: Rect,
-            val isClickable: Boolean,
-            val isEditable: Boolean
-        )
-
         fun getScreenElements(): List<ScreenElement> {
             val service = instance ?: return emptyList()
             val root = service.rootInActiveWindow ?: return emptyList()
@@ -33,7 +24,6 @@ class CorexAccessibilityService : AccessibilityService() {
         }
 
         private fun collectElements(node: AccessibilityNodeInfo, elements: MutableList<ScreenElement>) {
-            // Excluir elementos del propio Corex
             if (node.packageName?.toString() == "com.doey.corex") return
             val text = node.text?.toString()?.trim() ?: ""
             val desc = node.contentDescription?.toString()?.trim() ?: ""
@@ -64,14 +54,9 @@ class CorexAccessibilityService : AccessibilityService() {
             val elements = getScreenElements()
             if (index < 0 || index >= elements.size) return false
             val bounds = elements[index].bounds
-            return tapAt(service, bounds.centerX().toFloat(), bounds.centerY().toFloat())
-        }
-
-        fun tapAt(service: CorexAccessibilityService, x: Float, y: Float): Boolean {
-            val path = Path().apply { moveTo(x, y) }
-            val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 50)).build()
-            service.dispatchGesture(gesture, null, null)
+            val path = Path().apply { moveTo(bounds.centerX().toFloat(), bounds.centerY().toFloat()) }
+            service.dispatchGesture(GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 50)).build(), null, null)
             return true
         }
 
@@ -84,8 +69,7 @@ class CorexAccessibilityService : AccessibilityService() {
             field.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             Thread.sleep(150)
             val result = field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            field.recycle()
-            root.recycle()
+            field.recycle(); root.recycle()
             return result
         }
 
@@ -105,35 +89,15 @@ class CorexAccessibilityService : AccessibilityService() {
             return true
         }
 
-        fun pressBack() = instance?.performGlobalAction(GLOBAL_ACTION_BACK) != null
-        fun pressHome() = instance?.performGlobalAction(GLOBAL_ACTION_HOME) != null
+        fun pressBack() { instance?.performGlobalAction(GLOBAL_ACTION_BACK) }
+        fun pressHome() { instance?.performGlobalAction(GLOBAL_ACTION_HOME) }
 
-        fun openAppByName(name: String): String {
-            val service = instance ?: return "FAIL: Servicio no activo"
-            val apps = service.packageManager.queryIntentActivities(
-                Intent(android.content.Intent.ACTION_MAIN)
-                    .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0
-            )
-            // Mandar lista a IA para que elija
-            val list = apps.map { "${it.loadLabel(service.packageManager)}=${it.activityInfo.packageName}" }
-            val match = list.firstOrNull { it.startsWith(name, ignoreCase = true) }
-                ?: list.firstOrNull { it.contains(name, ignoreCase = true) }
-                ?: return "FAIL: $name no encontrado"
-            val pkg = match.substringAfter("=")
-            val intent = service.packageManager.getLaunchIntentForPackage(pkg) ?: return "FAIL: no intent"
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            service.applicationContext.startActivity(intent)
-            return "OK:$pkg"
-        }
-
-        fun getInstalledApps(): String {
-            val service = instance ?: return ""
-            val apps = service.packageManager.queryIntentActivities(
-                Intent(android.content.Intent.ACTION_MAIN)
-                    .addCategory(android.content.Intent.CATEGORY_LAUNCHER), 0
-            )
-            return apps.joinToString("\n") {
-                "${it.loadLabel(service.packageManager)}|${it.activityInfo.packageName}"
+        fun getInstalledApps(): List<Pair<String, String>> {
+            val service = instance ?: return emptyList()
+            return service.packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            ).map { info ->
+                info.loadLabel(service.packageManager).toString() to info.activityInfo.packageName
             }
         }
 
