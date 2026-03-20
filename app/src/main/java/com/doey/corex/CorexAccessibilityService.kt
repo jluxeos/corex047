@@ -144,10 +144,7 @@ class CorexAccessibilityService : AccessibilityService() {
                 )?.toString() ?: pkg
             } catch (e: Exception) { pkg }
             val dump = getDumpForAI()
-            return "App actual: $appName ($pkg)
-
-Elementos en pantalla:
-$dump"
+            return "App actual: $appName ($pkg)\nElementos en pantalla:\n$dump"
         }
 
         fun getDumpForAI(): String {
