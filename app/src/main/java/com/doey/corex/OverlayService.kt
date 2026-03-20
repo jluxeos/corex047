@@ -671,7 +671,6 @@ class OverlayService : Service() {
         mainHandler.post {
             tvChat?.text = chatMessages.joinToString("\n\n")
 
-")
             scrollChat?.post { scrollChat?.fullScroll(android.view.View.FOCUS_DOWN) }
         }
     }
