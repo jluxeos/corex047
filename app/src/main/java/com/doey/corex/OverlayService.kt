@@ -3,6 +3,7 @@ package com.doey.corex
 import android.app.*
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -10,6 +11,7 @@ import android.view.*
 import android.view.animation.DecelerateInterpolator
 import android.view.inputmethod.InputMethodManager
 import android.widget.*
+import androidx.gridlayout.widget.GridLayout
 import kotlinx.coroutines.*
 
 class OverlayService : Service() {
@@ -23,8 +25,11 @@ class OverlayService : Service() {
     private val history = mutableListOf<String>()
     private lateinit var params: WindowManager.LayoutParams
     private var tvHistorial: TextView? = null
+    private var tvDebug: TextView? = null
     private var panelPicker: View? = null
+    private var pickerGrid: GridLayout? = null
     private var pickerButtons: LinearLayout? = null
+    private var pickerScroll: View? = null
     private var tvPickerTitle: TextView? = null
 
     companion object {
@@ -35,11 +40,14 @@ class OverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         cache = LearningCache(this)
+        DebugLog.init(this)
+        DebugLog.log("Service", "onCreate")
         try {
             createNotificationChannel()
             startForeground(NOTIF_ID, buildNotification("Corex activo"))
             setupOverlay()
         } catch (e: Exception) {
+            DebugLog.logError("Service.onCreate", e)
             updateNotification("Error: ${e.javaClass.simpleName}: ${e.message?.take(60)}")
         }
     }
@@ -72,58 +80,80 @@ class OverlayService : Service() {
         overlayView?.let { imm.hideSoftInputFromWindow(it.windowToken, 0) }
     }
 
-    // Mostrar confirmación: "¿Es este X?" con Sí/No
+    // Grid de apps con iconos
+    private fun showAppGrid(title: String, apps: List<Triple<String, String, Drawable?>>, onChoice: (String) -> Unit) {
+        mainHandler.post {
+            tvPickerTitle?.text = title
+            pickerGrid?.removeAllViews()
+            pickerScroll?.visibility = View.GONE
+            pickerGrid?.visibility = View.VISIBLE
+
+            // Botón cancelar
+            val cancelBtn = Button(this).apply {
+                text = "✕"
+                setBackgroundResource(R.drawable.btn_tonal_bg)
+                setPadding(16, 8, 16, 8)
+                setOnClickListener { hidePicker() }
+            }
+            val cancelSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+            pickerGrid?.addView(cancelBtn, GridLayout.LayoutParams(cancelSpec, cancelSpec).apply {
+                width = 0; setMargins(4, 4, 4, 4)
+            })
+
+            for (app in apps) {
+                val label = app.first
+                val pkg = app.second
+                val icon = app.third
+                val cell = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = android.view.Gravity.CENTER
+                    setPadding(8, 8, 8, 8)
+                    setOnClickListener { hidePicker(); onChoice(pkg) }
+                }
+                val img = ImageView(this).apply {
+                    if (icon != null) setImageDrawable(icon)
+                    else setImageResource(android.R.drawable.sym_def_app_icon)
+                    layoutParams = LinearLayout.LayoutParams(48.dpToPx(), 48.dpToPx())
+                }
+                val txt = TextView(this).apply {
+                    text = label.take(10)
+                    textSize = 9f
+                    gravity = android.view.Gravity.CENTER
+                    maxLines = 2
+                }
+                cell.addView(img)
+                cell.addView(txt)
+                val spec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                pickerGrid?.addView(cell, GridLayout.LayoutParams(spec, spec).apply {
+                    width = 0; setMargins(2, 2, 2, 2)
+                })
+            }
+            panelPicker?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
+
+    // Confirmación Sí/No
     private fun showConfirmation(question: String, onYes: () -> Unit, onNo: () -> Unit) {
         mainHandler.post {
             tvPickerTitle?.text = question
-            pickerButtons?.removeAllViews()
-            pickerButtons?.addView(Button(this).apply {
+            pickerGrid?.removeAllViews()
+            pickerGrid?.visibility = View.VISIBLE
+            pickerScroll?.visibility = View.GONE
+            pickerGrid?.addView(Button(this).apply {
                 text = "✓ Sí"
                 setBackgroundResource(R.drawable.btn_send_bg)
                 setTextColor(0xFFFFFFFF.toInt())
                 setPadding(32, 8, 32, 8)
                 setOnClickListener { hidePicker(); onYes() }
             })
-            pickerButtons?.addView(Button(this).apply {
+            pickerGrid?.addView(Button(this).apply {
                 text = "✕ No"
                 setBackgroundResource(R.drawable.btn_tonal_bg)
                 setPadding(32, 8, 32, 8)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { setMargins(8, 0, 0, 0) }
                 setOnClickListener { hidePicker(); onNo() }
             })
-            panelPicker?.visibility = View.VISIBLE
-        }
-    }
-
-    // Picker de apps
-    private fun showAppPicker(title: String, options: List<Pair<String, String>>, onChoice: (String) -> Unit) {
-        mainHandler.post {
-            tvPickerTitle?.text = title
-            pickerButtons?.removeAllViews()
-            pickerButtons?.addView(Button(this).apply {
-                text = "✕ Ninguna"
-                setBackgroundResource(R.drawable.btn_tonal_bg)
-                setPadding(24, 8, 24, 8)
-                setOnClickListener { hidePicker() }
-            })
-            for (i in options.indices) {
-                val label = options[i].first
-                val pkg = options[i].second
-                pickerButtons?.addView(Button(this).apply {
-                    text = label
-                    setBackgroundResource(R.drawable.btn_send_bg)
-                    setTextColor(0xFFFFFFFF.toInt())
-                    setPadding(24, 8, 24, 8)
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply { setMargins(8, 0, 0, 0) }
-                    setOnClickListener { hidePicker(); onChoice(pkg) }
-                })
-            }
             panelPicker?.visibility = View.VISIBLE
         }
     }
@@ -132,6 +162,9 @@ class OverlayService : Service() {
     private fun showElementPicker(title: String, elements: List<ScreenElement>, onChoice: (ScreenElement?) -> Unit) {
         mainHandler.post {
             tvPickerTitle?.text = title
+            pickerGrid?.removeAllViews()
+            pickerGrid?.visibility = View.GONE
+            pickerScroll?.visibility = View.VISIBLE
             pickerButtons?.removeAllViews()
             pickerButtons?.addView(Button(this).apply {
                 text = "✕ No está"
@@ -139,7 +172,7 @@ class OverlayService : Service() {
                 setPadding(24, 8, 24, 8)
                 setOnClickListener { hidePicker(); onChoice(null) }
             })
-            for (i in 0 until minOf(elements.size, 12)) {
+            for (i in 0 until minOf(elements.size, 15)) {
                 val el = elements[i]
                 val label = el.text.ifEmpty { el.contentDesc }.take(20)
                 pickerButtons?.addView(Button(this).apply {
@@ -169,19 +202,23 @@ class OverlayService : Service() {
         val btnClose = v.findViewById<ImageButton>(R.id.btnClose)
         val btnExpand = v.findViewById<ImageButton>(R.id.btnExpand)
         val panelExpanded = v.findViewById<View>(R.id.panelExpanded)
-        val panelAcciones = v.findViewById<View>(R.id.panelAcciones)
-        val panelAjustes = v.findViewById<View>(R.id.panelAjustes)
         val scrollHistorial = v.findViewById<View>(R.id.scrollHistorial)
+        val scrollDebug = v.findViewById<View>(R.id.scrollDebug)
+        val panelAjustes = v.findViewById<View>(R.id.panelAjustes)
         tvHistorial = v.findViewById(R.id.tvHistorial)
+        tvDebug = v.findViewById(R.id.tvDebug)
         panelPicker = v.findViewById(R.id.panelPicker)
+        pickerGrid = v.findViewById(R.id.pickerGrid)
         pickerButtons = v.findViewById(R.id.pickerButtons)
+        pickerScroll = v.findViewById(R.id.pickerScroll)
         tvPickerTitle = v.findViewById(R.id.tvPickerTitle)
         val tabHistorial = v.findViewById<TextView>(R.id.tabHistorial)
-        val tabAcciones = v.findViewById<TextView>(R.id.tabAcciones)
+        val tabDebug = v.findViewById<TextView>(R.id.tabDebug)
         val tabAjustes = v.findViewById<TextView>(R.id.tabAjustes)
         val seekDelay = v.findViewById<SeekBar>(R.id.seekDelay)
         val tvDelayVal = v.findViewById<TextView>(R.id.tvDelayVal)
         val btnGuardar = v.findViewById<Button>(R.id.btnGuardar)
+        val btnExport = v.findViewById<Button>(R.id.btnExport)
         val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
         input.setOnClickListener { enableInput() }
@@ -203,21 +240,17 @@ class OverlayService : Service() {
 
         fun selectTab(tab: Int) {
             scrollHistorial.visibility = if (tab == 0) View.VISIBLE else View.GONE
-            panelAcciones.visibility = if (tab == 1) View.VISIBLE else View.GONE
+            scrollDebug.visibility = if (tab == 1) View.VISIBLE else View.GONE
             panelAjustes.visibility = if (tab == 2) View.VISIBLE else View.GONE
             val p = 0xFF6750A4.toInt(); val g = 0xFF79747E.toInt()
             tabHistorial.setTextColor(if (tab == 0) p else g)
-            tabAcciones.setTextColor(if (tab == 1) p else g)
+            tabDebug.setTextColor(if (tab == 1) p else g)
             tabAjustes.setTextColor(if (tab == 2) p else g)
+            if (tab == 1) tvDebug?.text = DebugLog.getLast(50)
         }
         tabHistorial.setOnClickListener { selectTab(0) }
-        tabAcciones.setOnClickListener { selectTab(1) }
+        tabDebug.setOnClickListener { selectTab(1) }
         tabAjustes.setOnClickListener { selectTab(2) }
-
-        // Acciones rápidas — launcher directo
-        v.findViewById<Button>(R.id.btnWhatsApp).setOnClickListener { launchApp("WhatsApp") }
-        v.findViewById<Button>(R.id.btnMaps).setOnClickListener { launchApp("Maps") }
-        v.findViewById<Button>(R.id.btnYoutube).setOnClickListener { launchApp("YouTube") }
 
         seekDelay.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, p: Int, f: Boolean) { tvDelayVal.text = "${p}ms" }
@@ -233,6 +266,18 @@ class OverlayService : Service() {
             addLog("Sistema", "✓ Guardado")
         }
 
+        btnExport.setOnClickListener {
+            try {
+                val file = cache.exportToFile()
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, android.net.Uri.fromFile(file))
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(Intent.createChooser(intent, "Exportar caché").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
+            } catch (e: Exception) { DebugLog.logError("Export", e) }
+        }
+
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
         etApiKey.setText(prefs.getString("api_key", ""))
         seekDelay.progress = prefs.getInt("delay", 400)
@@ -244,21 +289,32 @@ class OverlayService : Service() {
             input.setText("")
             disableInput()
             addLog("Tú", text)
+            DebugLog.log("Input", text)
             mainHandler.postDelayed({ processGoal(text) }, 400)
         }
 
         btnClose.setOnClickListener { stopSelf() }
     }
 
-    // LAUNCHER INTERNO: busca en apps instaladas, IA elige, confirma con usuario
+    private fun getAppsWithIcons(): List<Triple<String, String, Drawable?>> {
+        val svc = CorexAccessibilityService.instance ?: return emptyList()
+        return svc.packageManager.queryIntentActivities(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+        ).map { info ->
+            Triple(
+                info.loadLabel(svc.packageManager).toString(),
+                info.activityInfo.packageName,
+                try { info.loadIcon(svc.packageManager) } catch (e: Exception) { null }
+            )
+        }.sortedBy { it.first }
+    }
+
     private fun launchApp(name: String) {
         val prefs = getSharedPreferences("corex_prefs", MODE_PRIVATE)
         val apiKey = prefs.getString("api_key", "") ?: ""
-        scope.launch {
-            val apps = CorexAccessibilityService.getInstalledApps()
-            if (apps.isEmpty()) { addLog("⚠", "Activa el servicio de accesibilidad"); return@launch }
+        DebugLog.log("launchApp", "Buscando: $name")
 
-            // Verificar caché primero
+        scope.launch {
             val cached = cache.getAll().firstOrNull { it.key.equals("open_$name", ignoreCase = true) }
             if (cached != null && cached.packageName.isNotEmpty()) {
                 val svc = CorexAccessibilityService.instance ?: return@launch
@@ -267,56 +323,63 @@ class OverlayService : Service() {
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     applicationContext.startActivity(intent)
                     addLog("✓", "Abrí $name (caché)")
+                    DebugLog.log("launchApp", "Caché hit: ${cached.packageName}")
                     return@launch
                 }
             }
 
-            if (apiKey.isEmpty()) {
-                // Sin API key — mostrar picker directamente
-                val candidates = apps.filter { it.first.contains(name, ignoreCase = true) }.take(10).ifEmpty { apps.take(10) }
-                showAppPicker("¿Cuál es $name?", candidates) { pkg: String ->
-                    launchPkg(pkg, name)
-                }
-                return@launch
-            }
+            val apps = getAppsWithIcons()
+            if (apps.isEmpty()) { addLog("⚠", "Activa el servicio de accesibilidad"); return@launch }
 
-            // Con API key — IA elige y pide confirmación
-            val appListStr = apps.joinToString("\n") { "${it.first}|${it.second}" }
-            GroqClient.chooseApp(name, appListStr, apiKey) { pkg: String ->
-                val svc = CorexAccessibilityService.instance ?: return@chooseApp
-                if (pkg != "NONE" && pkg.contains(".")) {
-                    val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
-                    // Primera vez — pedir confirmación
-                    showConfirmation("¿Es este $name?\n→ $appLabel", {
-                        // Sí
-                        launchPkg(pkg, name)
-                        cache.learn("open_$name", pkg, -1, name, 0f, 0f)
-                        addLog("✓ Aprendí", "$name = $appLabel")
-                    }, {
-                        // No — mostrar picker
-                        val candidates = apps.filter { it.first.contains(name, ignoreCase = true) }.take(10).ifEmpty { apps.take(10) }
-                        showAppPicker("¿Cuál es $name entonces?", candidates) { chosenPkg: String ->
+            if (apiKey.isNotEmpty()) {
+                val appListStr = apps.joinToString("\n") { "${it.first}|${it.second}" }
+                DebugLog.log("launchApp", "Consultando IA para: $name")
+                GroqClient.chooseApp(name, appListStr, apiKey) { pkg: String ->
+                    DebugLog.log("launchApp", "IA eligió: $pkg")
+                    val svc = CorexAccessibilityService.instance ?: return@chooseApp
+                    if (pkg != "NONE" && pkg.contains(".")) {
+                        val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
+                        showConfirmation("¿Es este $name?\n→ $appLabel", {
+                            launchPkg(pkg, name)
+                            cache.learn("open_$name", pkg, -1, name, 0f, 0f)
+                            addLog("✓ Aprendí", "$name = $appLabel")
+                        }, {
+                            showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
+                                launchPkg(chosenPkg, name)
+                                val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
+                                cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
+                                addLog("✓ Aprendí", "$name = $label")
+                            }
+                        })
+                    } else {
+                        showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
                             launchPkg(chosenPkg, name)
+                            val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
+                            addLog("✓ Aprendí", "$name = $label")
                         }
-                    })
-                } else {
-                    val candidates = apps.filter { it.first.contains(name, ignoreCase = true) }.take(10).ifEmpty { apps.take(10) }
-                    showAppPicker("¿Cuál es $name?", candidates) { chosenPkg: String ->
-                        launchPkg(chosenPkg, name)
-                        cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                     }
+                }
+            } else {
+                showAppGrid("¿Cuál es $name?", apps) { chosenPkg: String ->
+                    launchPkg(chosenPkg, name)
+                    val label = apps.firstOrNull { it.second == chosenPkg }?.first ?: chosenPkg
+                    cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
+                    addLog("✓ Aprendí", "$name = $label")
                 }
             }
         }
     }
 
     private fun launchPkg(pkg: String, name: String) {
-        val svc = CorexAccessibilityService.instance ?: return
-        val intent = svc.packageManager.getLaunchIntentForPackage(pkg) ?: return
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        applicationContext.startActivity(intent)
-        addLog("✓ Abrí", name)
+        try {
+            val svc = CorexAccessibilityService.instance ?: return
+            val intent = svc.packageManager.getLaunchIntentForPackage(pkg) ?: return
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            applicationContext.startActivity(intent)
+            addLog("✓ Abrí", name)
+            DebugLog.log("launchPkg", "OK: $pkg")
+        } catch (e: Exception) { DebugLog.logError("launchPkg", e) }
     }
 
     private fun processGoal(goal: String) {
@@ -324,18 +387,16 @@ class OverlayService : Service() {
         val apiKey = prefs.getString("api_key", "") ?: ""
         if (apiKey.isEmpty()) { addLog("Corex", "⚠ Configura tu API key en Ajustes"); return }
         val delay = prefs.getInt("delay", 400).toLong()
+        DebugLog.log("processGoal", goal)
 
         scope.launch {
-            // Detectar si es abrir una app
             val openRegex = Regex("(?i)^(abre?r?|open|lanzar?|inicia?)\\s+(.+)$")
             val openMatch = openRegex.find(goal.trim())
             if (openMatch != null) {
-                val appName = openMatch.groupValues[2].trim()
-                launchApp(appName)
+                launchApp(openMatch.groupValues[2].trim())
                 return@launch
             }
 
-            // Tarea de navegación
             var maxSteps = 15
             var done = false
             val stepHistory = mutableListOf<String>()
@@ -347,6 +408,8 @@ class OverlayService : Service() {
                 val elements = CorexAccessibilityService.getScreenElements()
                 val learned = cache.getSummary()
                 val histStr = stepHistory.takeLast(4).joinToString(" → ")
+
+                DebugLog.log("Dump", dump.take(500))
                 addLog("📱", "${elements.size} elementos")
 
                 var responded = false
@@ -356,6 +419,8 @@ class OverlayService : Service() {
                 }
                 val timeout = System.currentTimeMillis() + 8000
                 while (!responded && System.currentTimeMillis() < timeout) Thread.sleep(100)
+
+                DebugLog.log("IA→", "${decision.action}: ${decision.value}")
                 addLog("🤖", "${decision.action}: ${decision.value}")
 
                 when (decision.action) {
@@ -369,6 +434,7 @@ class OverlayService : Service() {
                                 cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }, chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
                                 CorexAccessibilityService.tapElement(chosen.index)
                                 addLog("✓ Aprendí", "#${chosen.index}")
+                                DebugLog.log("Learn", "$goal → #${chosen.index}")
                                 scope.launch { Thread.sleep(delay); processGoal(goal) }
                             }
                         }
@@ -383,24 +449,20 @@ class OverlayService : Service() {
                         if (idx != null && idx < elements.size) {
                             val el = elements[idx]
                             val label = el.text.ifEmpty { el.contentDesc }
-                            // Pedir confirmación la primera vez
                             val pkg = CorexAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() ?: ""
                             val cached = cache.find(goal, pkg)
                             if (cached != null) {
-                                // Ya aprendido — tocar directo
                                 CorexAccessibilityService.tapElement(idx)
                                 stepHistory.add("TAP($idx)")
-                                Thread.sleep(500)
                             } else {
                                 done = true
-                                showConfirmation("¿Toco este botón?\n→ \"$label\"", {
-                                    // Sí
+                                showConfirmation("¿Toco este?\n→ \"$label\"", {
                                     cache.learn(goal, pkg, idx, label, el.bounds.centerX().toFloat(), el.bounds.centerY().toFloat())
                                     CorexAccessibilityService.tapElement(idx)
                                     addLog("✓ Aprendí", "#$idx '$label'")
+                                    DebugLog.log("Learn", "$goal → TAP #$idx '$label'")
                                     scope.launch { Thread.sleep(delay); processGoal(goal) }
                                 }, {
-                                    // No — mostrar picker
                                     showElementPicker("¿Cuál es el correcto?", elements) { chosen: ScreenElement? ->
                                         if (chosen != null) {
                                             cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }, chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
@@ -415,13 +477,14 @@ class OverlayService : Service() {
                             done = true
                             showElementPicker("¿Cuál toco para: $goal?", elements) { chosen: ScreenElement? ->
                                 if (chosen != null) {
-                                    CorexAccessibilityService.tapElement(chosen.index)
                                     val pkg = CorexAccessibilityService.instance?.rootInActiveWindow?.packageName?.toString() ?: ""
+                                    CorexAccessibilityService.tapElement(chosen.index)
                                     cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }, chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
                                     addLog("✓ Aprendí", "#${chosen.index}")
                                 }
                             }
                         }
+                        Thread.sleep(500)
                     }
                     "TYPE" -> { CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
                     "SCROLL_DOWN" -> { CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
@@ -475,6 +538,7 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        DebugLog.log("Service", "onDestroy")
         scope.cancel()
         try { overlayView?.let { windowManager?.removeView(it) } } catch (e: Exception) {}
     }
