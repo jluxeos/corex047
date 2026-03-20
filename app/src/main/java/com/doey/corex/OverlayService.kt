@@ -43,10 +43,17 @@ class OverlayService : Service() {
     companion object {
         const val CHANNEL_ID = "corex_overlay"
         const val NOTIF_ID = 1
+        var instance: OverlayService? = null
+
+        fun onScreenChanged() {
+            instance?.numberOverlay?.hide()
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
+        instance = this
         cache = LearningCache(this)
         macroEngine = MacroEngine(this)
         numberOverlay = NumberOverlay(this)
@@ -502,7 +509,7 @@ class OverlayService : Service() {
 
         scope.launch {
             // Verificar macro guardada
-            addChat("Ok, voy a ver qué puedo hacer con: \"$goal\"")
+            addChat("Ok, déjame ver qué necesito hacer para: \"$goal\"")
             val existingMacro = macroEngine.find(goal)
             if (existingMacro != null) {
                 addChat("Tengo esto memorizado, lo hago sin internet")
@@ -528,6 +535,8 @@ class OverlayService : Service() {
             while (!done && maxSteps > 0) {
                 maxSteps--
                 Thread.sleep(delay)
+                val context = CorexAccessibilityService.getEnrichedContext()
+                val currentApp = CorexAccessibilityService.getCurrentApp()
                 val dump = CorexAccessibilityService.getDumpForAI()
                 val elements = CorexAccessibilityService.getScreenElements()
                 val learned = cache.getSummary()
@@ -539,7 +548,7 @@ class OverlayService : Service() {
 
                 var responded = false
                 var decision = GroqClient.Decision("ASK", "timeout")
-                GroqClient.decide(goal, dump, histStr, learned, apiKey) { d: GroqClient.Decision ->
+                GroqClient.decide(goal, context, histStr, learned, apiKey) { d: GroqClient.Decision ->
                     decision = d; responded = true
                 }
                 val timeout = System.currentTimeMillis() + 8000
@@ -549,7 +558,7 @@ class OverlayService : Service() {
                 addLog("🤖", "${decision.action}: ${decision.value}")
 
                 when (decision.action) {
-                    "DONE" -> { done = true; addLog("Corex", "✅ Listo"); addChat("Listo, ya terminé lo que me pediste") }
+                    "DONE" -> { done = true; addLog("Corex", "✅ Listo"); addChat("Listo, ya quedó") }
                     "ASK" -> {
                         done = true
                         val question = decision.askUser.ifEmpty { "¿Cuál toco para: $goal?" }
@@ -565,7 +574,7 @@ class OverlayService : Service() {
                         }
                     }
                     "OPEN_APP" -> {
-                        addChat("Voy a abrir ${decision.value} para continuar")
+                        addChat("Necesito abrir ${decision.value} primero, un momento...")
                         launchApp(decision.value)
                         stepHistory.add("OPEN(${decision.value})")
                         Thread.sleep(1500)
@@ -614,8 +623,8 @@ class OverlayService : Service() {
                         }
                         Thread.sleep(500)
                     }
-                    "TYPE" -> { addChat("Escribo: \"${decision.value}\""); CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
-                    "SCROLL_DOWN" -> { addChat("Bajo un poco para ver más..."); CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
+                    "TYPE" -> { addChat("Escribo: ${decision.value}"); CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
+                    "SCROLL_DOWN" -> { addChat("Bajo un poco, a ver qué más hay..."); CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
                     "SCROLL_UP" -> { CorexAccessibilityService.scrollUp(); stepHistory.add("SCROLL_UP"); Thread.sleep(700) }
                     "BACK" -> { CorexAccessibilityService.pressBack(); stepHistory.add("BACK"); Thread.sleep(500) }
                     "HOME" -> { CorexAccessibilityService.pressHome(); stepHistory.add("HOME"); Thread.sleep(500) }
@@ -709,6 +718,8 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        instance = null
+        instance = null
         DebugLog.log("Service", "onDestroy")
         scope.cancel()
         numberOverlay.hide()

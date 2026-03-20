@@ -131,6 +131,25 @@ class CorexAccessibilityService : AccessibilityService() {
             }
         }
 
+        fun getCurrentApp(): String {
+            val root = instance?.rootInActiveWindow ?: return "desconocida"
+            return root.packageName?.toString() ?: "desconocida"
+        }
+
+        fun getEnrichedContext(): String {
+            val pkg = getCurrentApp()
+            val appName = try {
+                instance?.packageManager?.getApplicationLabel(
+                    instance?.packageManager?.getApplicationInfo(pkg, 0)!!
+                )?.toString() ?: pkg
+            } catch (e: Exception) { pkg }
+            val dump = getDumpForAI()
+            return "App actual: $appName ($pkg)
+
+Elementos en pantalla:
+$dump"
+        }
+
         fun getDumpForAI(): String {
             val elements = getScreenElements()
             if (elements.isEmpty()) return "PANTALLA VACÍA"
@@ -153,7 +172,12 @@ class CorexAccessibilityService : AccessibilityService() {
     }
 
     override fun onServiceConnected() { instance = this }
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Notificar cambio de pantalla para ocultar overlay de numeros
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            OverlayService.onScreenChanged()
+        }
+    }
     override fun onInterrupt() { instance = null }
     override fun onDestroy() { super.onDestroy(); instance = null }
 }
