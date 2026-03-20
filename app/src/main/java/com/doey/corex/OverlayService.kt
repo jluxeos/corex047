@@ -287,19 +287,19 @@ class OverlayService : Service() {
                 if (pkg != "NONE" && pkg.contains(".")) {
                     val appLabel = apps.firstOrNull { it.second == pkg }?.first ?: pkg
                     // Primera vez — pedir confirmación
-                    showConfirmation("¿Es este $name?\n→ $appLabel") {
+                    showConfirmation("¿Es este $name?\n→ $appLabel", {
                         // Sí
                         launchPkg(pkg, name)
                         cache.learn("open_$name", pkg, -1, name, 0f, 0f)
                         addLog("✓ Aprendí", "$name = $appLabel")
-                    } {
+                    }, {
                         // No — mostrar picker
                         val candidates = apps.filter { it.first.contains(name, ignoreCase = true) }.take(10).ifEmpty { apps.take(10) }
                         showAppPicker("¿Cuál es $name entonces?", candidates) { chosenPkg: String ->
                             launchPkg(chosenPkg, name)
                             cache.learn("open_$name", chosenPkg, -1, name, 0f, 0f)
                         }
-                    }
+                    })
                 } else {
                     val candidates = apps.filter { it.first.contains(name, ignoreCase = true) }.take(10).ifEmpty { apps.take(10) }
                     showAppPicker("¿Cuál es $name?", candidates) { chosenPkg: String ->
@@ -393,17 +393,17 @@ class OverlayService : Service() {
                                 Thread.sleep(500)
                             } else {
                                 done = true
-                                showConfirmation("¿Toco este botón?\n→ \"$label\"") {
+                                showConfirmation("¿Toco este botón?\n→ \"$label\"", {
                                     // Sí
                                     cache.learn(goal, pkg, idx, label, el.bounds.centerX().toFloat(), el.bounds.centerY().toFloat())
                                     CorexAccessibilityService.tapElement(idx)
                                     addLog("✓ Aprendí", "#$idx '$label'")
                                     scope.launch { Thread.sleep(delay); processGoal(goal) }
-                                } {
+                                }, {
                                     // No — mostrar picker
                                     showElementPicker("¿Cuál es el correcto?", elements) { chosen: ScreenElement? ->
                                         if (chosen != null) {
-                                            cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }, chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
+                                            cache.learn(goal, pkg, chosen.index, chosen.text.ifEmpty { chosen.contentDesc }), chosen.bounds.centerX().toFloat(), chosen.bounds.centerY().toFloat())
                                             CorexAccessibilityService.tapElement(chosen.index)
                                             addLog("✓ Aprendí", "#${chosen.index}")
                                             scope.launch { Thread.sleep(delay); processGoal(goal) }
