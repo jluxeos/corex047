@@ -221,7 +221,12 @@ class OverlayService : Service() {
         val btnExport = v.findViewById<Button>(R.id.btnExport)
         val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
-        input.setOnClickListener { enableInput() }
+        input.setOnClickListener {
+            enableInput()
+            input.requestFocus()
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+        }
         etApiKey.setOnClickListener { enableInput() }
         input.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) disableInput() }
 
