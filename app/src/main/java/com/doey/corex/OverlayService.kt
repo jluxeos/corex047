@@ -245,10 +245,11 @@ class OverlayService : Service() {
         val etApiKey = v.findViewById<EditText>(R.id.etApiKey)
 
         input.setOnClickListener {
-            enableInput()
+            params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+            windowManager?.updateViewLayout(overlayView, params)
             input.requestFocus()
             val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
-            imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT)
+            imm.showSoftInput(input, InputMethodManager.SHOW_FORCED)
         }
         etApiKey.setOnClickListener { enableInput() }
         input.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) disableInput() }
@@ -314,7 +315,6 @@ class OverlayService : Service() {
             val text = input.text.toString().trim()
             if (text.isEmpty()) return@setOnClickListener
             input.setText("")
-            disableInput()
             addLog("Tú", text)
             DebugLog.log("Input", text)
 
@@ -375,7 +375,8 @@ class OverlayService : Service() {
                 return@setOnClickListener
             }
 
-            mainHandler.postDelayed({ processGoal(text) }, 800)
+            disableInput()
+            mainHandler.postDelayed({ processGoal(text) }, 1200)
         }
 
         btnClose.setOnClickListener { stopSelf() }
@@ -623,7 +624,14 @@ class OverlayService : Service() {
                         }
                         Thread.sleep(500)
                     }
-                    "TYPE" -> { addChat("Escribo: ${decision.value}"); CorexAccessibilityService.typeText(decision.value); stepHistory.add("TYPE"); Thread.sleep(300) }
+                    "TYPE" -> {
+                        addChat("Escribo: ${decision.value}")
+                        val inputEl = elements.firstOrNull { it.isEditable }
+                        if (inputEl != null) { CorexAccessibilityService.tapElement(inputEl.index); Thread.sleep(300) }
+                        CorexAccessibilityService.typeText(decision.value)
+                        stepHistory.add("TYPE")
+                        Thread.sleep(300)
+                    }
                     "SCROLL_DOWN" -> { addChat("Bajo un poco, a ver qué más hay..."); CorexAccessibilityService.scrollDown(); stepHistory.add("SCROLL_DOWN"); Thread.sleep(700) }
                     "SCROLL_UP" -> { CorexAccessibilityService.scrollUp(); stepHistory.add("SCROLL_UP"); Thread.sleep(700) }
                     "BACK" -> { CorexAccessibilityService.pressBack(); stepHistory.add("BACK"); Thread.sleep(500) }
@@ -631,7 +639,7 @@ class OverlayService : Service() {
                     else -> { done = true; addLog("Corex", "⛔ No pude completar") }
                 }
 
-                if (stepHistory.size >= 3 && stepHistory.takeLast(3).all { it == stepHistory.last() }) {
+                if (stepHistory.size >= 4 && stepHistory.takeLast(4).distinct().size == 1) {
                     done = true
                     showElementPicker("Atascado — ¿Cuál toco?", elements) { chosen: ScreenElement? ->
                         if (chosen != null) { CorexAccessibilityService.tapElement(chosen.index); addLog("✓", "#${chosen.index}") }
@@ -678,7 +686,8 @@ class OverlayService : Service() {
         chatMessages.add(msg)
         if (chatMessages.size > 100) chatMessages.removeAt(0)
         mainHandler.post {
-            tvChat?.text = chatMessages.joinToString("\n\n")
+            val snapshot = chatMessages.toList()
+            tvChat?.text = snapshot.joinToString("\n\n")
 
             scrollChat?.post { scrollChat?.fullScroll(android.view.View.FOCUS_DOWN) }
         }
